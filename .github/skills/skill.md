@@ -12,6 +12,7 @@ Use this skill when you want to:
 - Apply multiple timed text overlays to a base video/image.
 - Add a top/bottom/left/right text side-box while keeping the full original video visible.
 - Query media width/height/duration with `get_media_info.py` so the agent can auto-build correct configs.
+- Resolve Stash scene IDs to media paths and resolve marker timing for trim/overlay windows.
 
 Outputs are written to `render/` and logs to `logs/`. Intermediate overlay PNGs are saved alongside the final output file.
 
@@ -76,6 +77,62 @@ Outputs a JSON object to stdout:
 }
 ```
 
+### Query Stash scene info
+
+Set env vars once in your terminal session:
+
+```powershell
+$env:STASH_GRAPHQL_ENDPOINT = "http://localhost:9999/graphql"
+$env:STASH_API_KEY = "your_api_key_if_needed"
+```
+
+Then fetch scene media path + markers:
+
+```powershell
+uv run .github/scripts/get_stash_scene_info.py --scene-id 123
+```
+
+The output includes a `media_path` and marker list with `start_time` / `end_time` values.
+
+## How to Get Marker IDs, Titles, and Tags from Stash
+
+To use marker-based trimming or overlays, you need the marker IDs or titles for a scene. Here’s how to fetch them:
+
+1. **Set your Stash environment variables:**
+   ```powershell
+   $env:STASH_GRAPHQL_ENDPOINT = "http://localhost:9999/graphql"
+   $env:STASH_API_KEY = "your_api_key_if_needed"
+   ```
+
+2. **Query the scene info (including markers):**
+   ```powershell
+   uv run .github/scripts/get_stash_scene_info.py --scene-id <your_scene_id>
+   ```
+
+3. **Read the output:**
+   - The output will include:
+     - `scene_id`, `title`, and `tags` for the scene
+     - `media_path` (absolute path to the video/image)
+     - `markers`: a list of objects, each with:
+       - `id`: the marker ID (use for configs)
+       - `title`: the marker title (can also be used for configs)
+       - `start_time`, `end_time`, and `duration`
+       - `tags`: list of tag names for the marker
+       - `primary_tag`: the main tag for the marker (if set)
+
+4. **Use the marker ID or title in your config:**
+   - Example using marker ID:
+     ```json
+     { "$stash_marker_time": { "scene_id": 123, "marker_id": 456, "time": "start" } }
+     ```
+   - Example using marker title:
+     ```json
+     { "$stash_marker_time": { "scene_id": 123, "marker_title": "My Marker", "time": "end" } }
+     ```
+
+5. **Tip:**
+   - You can use the marker `tags` and `primary_tag` fields to help you or an LLM agent choose the right marker for your workflow.
+
 ## JSON Job Formats
 
 ### 1) Single operation
@@ -129,6 +186,37 @@ Outputs a JSON object to stdout:
 ```
 
 `$last_output` in pipelines is replaced by the previous step's output path.
+
+### 3) Stash references in JSON
+
+`run_meme_job.py` resolves Stash references before running operations.
+
+Supported forms:
+- Scene path token: `"stash:scene:<scene_id>"`
+- Marker token: `"stash:marker:<scene_id>:<marker_id_or_title>:<start|end>"`
+  - Use `title=<exact marker title>` for title lookup.
+- Object scene reference: `{ "$stash_scene_path": 123 }`
+- Object marker reference:
+  - `{ "$stash_marker_time": { "scene_id": 123, "marker_id": 456, "time": "start" } }`
+  - `{ "$stash_marker_time": { "scene_id": 123, "marker_title": "Interesting moment", "time": "end", "default_duration_sec": 2.5 } }`
+
+Example:
+
+```json
+{
+  "operation": "trim_video",
+  "params": {
+    "input_path": { "$stash_scene_path": 123 },
+    "start_sec": { "$stash_marker_time": { "scene_id": 123, "marker_id": 456, "time": "start" } },
+    "end_sec": { "$stash_marker_time": { "scene_id": 123, "marker_id": 456, "time": "end", "default_duration_sec": 3.0 } },
+    "output_path": "render/examples/stash_trim.mp4"
+  }
+}
+```
+
+Notes:
+- `STASH_GRAPHQL_ENDPOINT` (or `STASH_URL`) must be set when a config contains any Stash reference.
+- `STASH_API_KEY` is optional and passed via both `ApiKey` and `Authorization: Bearer` headers.
 
 ## Supported Operations
 

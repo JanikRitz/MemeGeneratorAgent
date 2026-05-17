@@ -1,0 +1,25 @@
+{
+  "pipeline": [
+    {
+      "operation": "trim_video",
+      "params": {
+        "input_path": { "$stash_scene_path": 1141 },
+        "start_sec": { "$stash_marker_time": { "scene_id": 1141, "marker_id": 878, "time": "start" } },
+        "end_sec": { "$stash_marker_time": { "scene_id": 1141, "marker_id": 878, "time": "end", "default_duration_sec": 2.0 } },
+        "output_path": "render/examples/stash_trim_by_marker_raw.mp4"
+      }
+    },
+    {
+      "operation": "scale_media",
+      "params": {
+        "input_path": "$last_output",
+        "output_path": "render/examples/stash_trim_by_marker.mp4",
+        "max_long_side": 640,
+        "video_crf": 30,
+        "video_preset": "fast",
+        "video_bitrate": "1200k",
+        "audio_bitrate": "96k"
+      }
+    }
+  ]
+}

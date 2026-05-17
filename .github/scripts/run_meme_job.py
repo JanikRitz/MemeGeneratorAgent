@@ -1,11 +1,17 @@
 import argparse
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from MemeEngine import MemeEngine
+
+try:
+    from stash_client import StashClient
+except ImportError:
+    from .stash_client import StashClient
 
 
 def setup_logging(logs_dir: Path) -> logging.Logger:
@@ -182,6 +188,98 @@ def rewrite_media_paths(obj: Any, project_root: Path) -> Any:
     return obj
 
 
+def contains_stash_references(obj: Any) -> bool:
+    if isinstance(obj, dict):
+        if "$stash_scene_path" in obj or "$stash_marker_time" in obj:
+            return True
+        return any(contains_stash_references(value) for value in obj.values())
+    if isinstance(obj, list):
+        return any(contains_stash_references(item) for item in obj)
+    if isinstance(obj, str):
+        return obj.startswith("stash:scene:") or obj.startswith("stash:marker:")
+    return False
+
+
+def _parse_stash_marker_token(token: str) -> Dict[str, Any]:
+    # Format: stash:marker:<scene_id>:<marker_id_or_title>:<start|end>
+    # Prefix a marker title with title= to disambiguate from numeric marker IDs.
+    parts = token.split(":", 5)
+    if len(parts) != 5:
+        raise ValueError(
+            "Invalid stash marker token. Expected stash:marker:<scene_id>:<marker_id_or_title>:<start|end>"
+        )
+
+    scene_id = parts[2]
+    marker_ref = parts[3]
+    time_value = parts[4]
+
+    spec: Dict[str, Any] = {
+        "scene_id": scene_id,
+        "time": time_value,
+    }
+    if marker_ref.startswith("title="):
+        spec["marker_title"] = marker_ref[len("title=") :]
+    else:
+        spec["marker_id"] = marker_ref
+    return spec
+
+
+def resolve_stash_references(obj: Any, stash: StashClient) -> Any:
+    if isinstance(obj, dict):
+        if "$stash_scene_path" in obj:
+            return stash.get_scene_path(obj["$stash_scene_path"])
+
+        if "$stash_marker_time" in obj:
+            spec = obj["$stash_marker_time"]
+            if not isinstance(spec, dict):
+                raise ValueError("$stash_marker_time must be an object")
+
+            default_duration = spec.get("default_duration_sec")
+            return stash.resolve_marker_time(
+                scene_id=spec["scene_id"],
+                marker_id=spec.get("marker_id"),
+                marker_title=spec.get("marker_title"),
+                time_value=str(spec.get("time", "start")),
+                default_duration_sec=float(default_duration) if default_duration is not None else None,
+            )
+
+        return {key: resolve_stash_references(value, stash) for key, value in obj.items()}
+
+    if isinstance(obj, list):
+        return [resolve_stash_references(item, stash) for item in obj]
+
+    if isinstance(obj, str):
+        if obj.startswith("stash:scene:"):
+            scene_id = obj[len("stash:scene:") :]
+            return stash.get_scene_path(scene_id)
+
+        if obj.startswith("stash:marker:"):
+            spec = _parse_stash_marker_token(obj)
+            return stash.resolve_marker_time(
+                scene_id=spec["scene_id"],
+                marker_id=spec.get("marker_id"),
+                marker_title=spec.get("marker_title"),
+                time_value=str(spec.get("time", "start")),
+            )
+
+    return obj
+
+
+def maybe_resolve_stash_references(config: Dict[str, Any]) -> Dict[str, Any]:
+    if not contains_stash_references(config):
+        return config
+
+    endpoint = os.getenv("STASH_GRAPHQL_ENDPOINT") or os.getenv("STASH_URL")
+    api_key = os.getenv("STASH_API_KEY")
+    if not endpoint:
+        raise ValueError(
+            "Config contains Stash references but STASH_GRAPHQL_ENDPOINT (or STASH_URL) is not set"
+        )
+
+    stash = StashClient(endpoint=endpoint, api_key=api_key)
+    return resolve_stash_references(config, stash)
+
+
 def get_output_path_from_config(cfg: Dict[str, Any]) -> Optional[Path]:
     if "pipeline" in cfg:
         for step in reversed(cfg["pipeline"]):
@@ -228,6 +326,7 @@ def main() -> None:
                     continue
 
             config = rewrite_media_paths(config, project_root)
+            config = maybe_resolve_stash_references(config)
 
             output_path = get_output_path_from_config(config)
             if output_path and output_path.exists():
@@ -273,6 +372,7 @@ def main() -> None:
     project_root = Path(config_path).resolve().parents[2]
 
     config = rewrite_media_paths(config, project_root)
+    config = maybe_resolve_stash_references(config)
 
     logger = setup_logging(project_root / "logs")
     engine = MemeEngine(base_dir=str(project_root), logger=logger)
