@@ -49,7 +49,7 @@ class MemeEngine:
     def _clip_with_duration(self, clip, duration: float):
         if hasattr(clip, "with_duration"):
             return clip.with_duration(duration)
-        return clip.set_duration(duration)
+        return clip.with_duration(duration)
 
     def _clip_with_audio(self, clip, audio_clip):
         if audio_clip is None:
@@ -133,23 +133,23 @@ class MemeEngine:
             orientation,
         )
 
-        clip1 = VideoFileClip(str(p1)) if self._is_video(p1) else ImageClip(str(p1)).set_duration(duration_sec)
-        clip2 = VideoFileClip(str(p2)) if self._is_video(p2) else ImageClip(str(p2)).set_duration(duration_sec)
+        clip1 = VideoFileClip(str(p1)) if self._is_video(p1) else ImageClip(str(p1)).with_duration(duration_sec)
+        clip2 = VideoFileClip(str(p2)) if self._is_video(p2) else ImageClip(str(p2)).with_duration(duration_sec)
 
         if clip1.duration != clip2.duration:
             duration = max(clip1.duration, clip2.duration)
-            clip1 = clip1.set_duration(duration)
-            clip2 = clip2.set_duration(duration)
+            clip1 = clip1.with_duration(duration)
+            clip2 = clip2.with_duration(duration)
 
         if orientation == "horizontal":
             target_h = int(min(clip1.h, clip2.h))
-            clip1 = clip1.resize(height=target_h)
-            clip2 = clip2.resize(height=target_h)
+            clip1 = clip1.resized(height=target_h)
+            clip2 = clip2.resized(height=target_h)
             grid = [[clip1, clip2]]
         else:
             target_w = int(min(clip1.w, clip2.w))
-            clip1 = clip1.resize(width=target_w)
-            clip2 = clip2.resize(width=target_w)
+            clip1 = clip1.resized(width=target_w)
+            clip2 = clip2.resized(width=target_w)
             grid = [[clip1], [clip2]]
 
         final_clip = clips_array(grid)
@@ -251,6 +251,7 @@ class MemeEngine:
         line_height: float = 1.0,
         paragraph_spacing: Optional[int] = None,
         paragraph_indent_px: int = 0,
+        auto_size: bool = True,
     ) -> str:
         base_path = self.resolve_path(base_media_path)
         out_p = self.resolve_output_path(output_path)
@@ -272,23 +273,79 @@ class MemeEngine:
         base_w = int(base_clip.w)
         base_h = int(base_clip.h)
 
+        tokens = self.renderer.parse_tokens(text_data)
+        if font_size:
+            for token in tokens:
+                token.setdefault("size", int(font_size))
+
+        def _measure_panel(width: int, height: int) -> Dict[str, Any]:
+            _, metrics = self.renderer.generate_canvas(
+                tokens,
+                max(1, int(width)),
+                max(1, int(height)),
+                horizontal_align=text_align,
+                vertical_align=text_vertical_align,
+                padding=int(text_padding),
+                stroke_width=int(stroke_width),
+                stroke_fill=stroke_fill,
+                shadow_enabled=bool(shadow_enabled),
+                background_fill=background_color,
+                line_height=line_height,
+                paragraph_spacing=paragraph_spacing,
+                paragraph_indent_px=paragraph_indent_px,
+                return_metrics=True,
+            )
+            return metrics
+
         if side_value in {"top", "bottom"}:
-            panel_size = int(box_size_px if box_size_px else round(base_h * float(box_size_ratio)))
+            min_panel_size = int(round(base_h * float(box_size_ratio)))
+            panel_size = int(box_size_px if box_size_px else min_panel_size)
+
+            # Auto-grow panel height based on rendered text needs while keeping
+            # existing ratio as the minimum baseline.
+            if box_size_px is None and bool(auto_size):
+                measured = _measure_panel(base_w, panel_size)
+                required = int(measured.get("text_total_height", 0)) + (int(text_padding) * 2)
+                panel_size = max(panel_size, required)
+
             panel_w, panel_h = base_w, max(1, panel_size)
             final_w, final_h = base_w, base_h + panel_h
             base_position = (0, panel_h) if side_value == "top" else (0, 0)
             panel_position = (0, 0) if side_value == "top" else (0, base_h)
         else:
-            panel_size = int(box_size_px if box_size_px else round(base_w * float(box_size_ratio)))
+            min_panel_size = int(round(base_w * float(box_size_ratio)))
+            panel_size = int(box_size_px if box_size_px else min_panel_size)
+
+            # For left/right panels, width controls wrapping and therefore text
+            # height. Grow width until text fits in available panel height.
+            if box_size_px is None and bool(auto_size):
+                max_panel_width = max(panel_size, int(base_w * 3.0))
+                if _measure_panel(panel_size, base_h).get("overflowed"):
+                    low = panel_size
+                    high = panel_size
+                    while high < max_panel_width and _measure_panel(high, base_h).get("overflowed"):
+                        low = high
+                        high = min(max_panel_width, high * 2)
+
+                    if _measure_panel(high, base_h).get("overflowed"):
+                        panel_size = high
+                    else:
+                        left = low + 1
+                        right = high
+                        best = high
+                        while left <= right:
+                            mid = (left + right) // 2
+                            if _measure_panel(mid, base_h).get("overflowed"):
+                                left = mid + 1
+                            else:
+                                best = mid
+                                right = mid - 1
+                        panel_size = best
+
             panel_w, panel_h = max(1, panel_size), base_h
             final_w, final_h = base_w + panel_w, base_h
             base_position = (panel_w, 0) if side_value == "left" else (0, 0)
             panel_position = (0, 0) if side_value == "left" else (base_w, 0)
-
-        tokens = self.renderer.parse_tokens(text_data)
-        if font_size:
-            for token in tokens:
-                token.setdefault("size", int(font_size))
 
         panel_canvas, metrics = self.renderer.generate_canvas(
             tokens,
@@ -337,13 +394,14 @@ class MemeEngine:
         composite = self._clip_with_audio(composite, getattr(base_clip, "audio", None))
 
         self.logger.info(
-            "add_text_side_box base=%s side=%s panel=%sx%s final=%sx%s output=%s panel_png=%s",
+            "add_text_side_box base=%s side=%s panel=%sx%s final=%sx%s auto_size=%s output=%s panel_png=%s",
             base_path,
             side_value,
             panel_w,
             panel_h,
             final_w,
             final_h,
+            bool(auto_size),
             out_p,
             panel_png_path,
         )
@@ -376,7 +434,7 @@ class MemeEngine:
         else:
             max_overlay_end = max((float(item.get("end_time", 3.0)) for item in overlays), default=3.0)
             duration = output_duration_sec or max_overlay_end
-            base_clip = ImageClip(str(base_path)).set_duration(duration)
+            base_clip = ImageClip(str(base_path)).with_duration(duration)
             composition_duration = duration
 
         layered_clips = [base_clip]

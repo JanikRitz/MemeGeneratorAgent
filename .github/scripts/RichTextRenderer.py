@@ -374,6 +374,8 @@ class RichTextRenderer:
             "rendered_lines": rendered_lines,
             "total_lines": len(lines),
             "truncated_lines": max(0, len(lines) - rendered_lines),
+            "max_line_width": int(max(line_widths) if line_widths else 0),
+            "text_total_height": int(total_text_height),
             "line_spacing": int(line_spacing),
             "paragraph_spacing": int(paragraph_spacing),
             "paragraph_indent_px": int(paragraph_indent_px),

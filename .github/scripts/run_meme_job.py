@@ -121,6 +121,7 @@ def execute_step(
             line_height=float(params.get("line_height", 1.0)),
             paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
             paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
+            auto_size=bool(params.get("auto_size", True)),
         )
 
     if operation == "apply_multi_text_overlays":

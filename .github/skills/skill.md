@@ -195,10 +195,13 @@ Each overlay item can include:
 - Params: `base_media_path`, `text_data`, `side`, `output_path`
 - Optional: `overlay_dir`, `box_size_px`, `box_size_ratio`, `background_color`, `text_align`, `text_vertical_align`, `text_padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `output_duration_sec`, `panel_png_name`
 - Optional paragraph params: `paragraph_spacing`, `paragraph_indent_px`
+- Optional sizing control: `auto_size` (bool, default `true`)
 - Optional: `preview_only` (bool)
 - Behavior:
   - Expands output canvas at the chosen side (`top`, `bottom`, `left`, `right`)
   - Keeps full original video visible (no crop, no scale)
+  - If `box_size_px` is not set and `auto_size=true`, panel size auto-grows to fit text content
+  - `box_size_ratio` still acts as a minimum baseline size when auto sizing
   - Saves panel PNG in `overlay_dir`
   - Wraps text to panel width
   - If `preview_only=true`, skips video render and only returns the generated panel PNG path
