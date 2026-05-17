@@ -137,6 +137,15 @@ Outputs a JSON object to stdout:
 - `trim_video` always cuts the clip to the requested range; there is no implicit "full clip" mode.
 - To keep the full clip, do not use `trim_video` in the pipeline, or set `start_sec: 0.0` and `end_sec` to the source duration from `get_media_info.py`.
 
+### `scale_media`
+- Params: `input_path`, `output_path`
+- Optional: `max_long_side`, `max_short_side`, `upscale` (default `false`)
+- Preserves aspect ratio for both image and video inputs.
+- At least one limit is required:
+  - `max_long_side`: caps the larger dimension (great for one-number targets like `1920` for 1080x1920 / 1920x1080)
+  - `max_short_side`: caps the smaller dimension
+- Recommended usage: first step in a pipeline, then reference `$last_output` for overlay/side-box steps.
+
 ### `stack_media`
 - Params: `path1`, `path2`, `output_path`
 - Optional: `orientation` (`horizontal` or `vertical`), `duration_sec` (for still images)
@@ -238,6 +247,7 @@ Each overlay item can include:
 
 - Timed text overlays: `config/examples/example_overlay.json`
 - Trim + caption pipeline: `config/examples/example_pipeline.json`
+- Scale then top side-box (image): `config/examples/scale_then_top_box_image.json`
 - Side box (right): `config/examples/example_side_box_right.json`
 - Side box (bottom, dense text): `config/examples/example_side_box_bottom.json`
 - Side box fast preview (PNG only): pass `--preview-only` flag or set `"preview_only": true` in config

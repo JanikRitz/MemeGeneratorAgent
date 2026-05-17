@@ -106,6 +106,126 @@ class MemeEngine:
             return position, "center"
         return "center", "center"
 
+    def _compute_scale_factor(
+        self,
+        width: int,
+        height: int,
+        max_long_side: Optional[int],
+        max_short_side: Optional[int],
+        upscale: bool,
+    ) -> float:
+        factors: List[float] = []
+        long_side = max(width, height)
+        short_side = min(width, height)
+
+        if max_long_side is not None:
+            if max_long_side <= 0:
+                raise ValueError("max_long_side must be > 0")
+            factors.append(float(max_long_side) / float(long_side))
+
+        if max_short_side is not None:
+            if max_short_side <= 0:
+                raise ValueError("max_short_side must be > 0")
+            factors.append(float(max_short_side) / float(short_side))
+
+        if not factors:
+            raise ValueError("Provide at least one of: max_long_side, max_short_side")
+
+        scale_factor = min(factors)
+        if not upscale:
+            scale_factor = min(scale_factor, 1.0)
+        return scale_factor
+
+    def scale_media(
+        self,
+        input_path: str,
+        output_path: str,
+        max_long_side: Optional[int] = None,
+        max_short_side: Optional[int] = None,
+        upscale: bool = False,
+    ) -> str:
+        in_p = self.resolve_path(input_path)
+        out_p = self.resolve_output_path(output_path)
+        media_is_video = self._is_video(in_p)
+
+        if media_is_video:
+            with VideoFileClip(str(in_p)) as clip:
+                src_w = int(clip.w)
+                src_h = int(clip.h)
+                scale_factor = self._compute_scale_factor(
+                    src_w,
+                    src_h,
+                    max_long_side=max_long_side,
+                    max_short_side=max_short_side,
+                    upscale=upscale,
+                )
+
+                target_w = max(2, int(round(src_w * scale_factor)))
+                target_h = max(2, int(round(src_h * scale_factor)))
+
+                # x264 is most compatible with even dimensions.
+                if target_w % 2 != 0:
+                    target_w -= 1
+                if target_h % 2 != 0:
+                    target_h -= 1
+
+                if target_w == src_w and target_h == src_h:
+                    scaled = clip
+                else:
+                    scaled = clip.resized(new_size=(target_w, target_h))
+
+                fps = float(getattr(clip, "fps", 24) or 24)
+                scaled.write_videofile(
+                    str(out_p),
+                    codec="libx264",
+                    audio_codec="aac",
+                    fps=fps,
+                )
+
+                self.logger.info(
+                    "scale_media video input=%s source=%sx%s target=%sx%s output=%s",
+                    in_p,
+                    src_w,
+                    src_h,
+                    target_w,
+                    target_h,
+                    out_p,
+                )
+        else:
+            with Image.open(str(in_p)).convert("RGBA") as img:
+                src_w, src_h = img.size
+                scale_factor = self._compute_scale_factor(
+                    src_w,
+                    src_h,
+                    max_long_side=max_long_side,
+                    max_short_side=max_short_side,
+                    upscale=upscale,
+                )
+                target_w = max(1, int(round(src_w * scale_factor)))
+                target_h = max(1, int(round(src_h * scale_factor)))
+
+                if target_w == src_w and target_h == src_h:
+                    scaled_img = img
+                else:
+                    scaled_img = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+
+                if out_p.suffix.lower() in {".jpg", ".jpeg"}:
+                    scaled_img.convert("RGB").save(str(out_p))
+                else:
+                    scaled_img.save(str(out_p))
+
+                self.logger.info(
+                    "scale_media image input=%s source=%sx%s target=%sx%s output=%s",
+                    in_p,
+                    src_w,
+                    src_h,
+                    target_w,
+                    target_h,
+                    out_p,
+                )
+
+        return str(out_p)
+
     def trim_video(self, input_path: str, start_sec: float, end_sec: float, output_path: str) -> str:
         in_p = self.resolve_path(input_path)
         out_p = self.resolve_output_path(output_path)

@@ -59,6 +59,15 @@ def execute_step(
             output_path=params["output_path"],
         )
 
+    if operation == "scale_media":
+        return engine.scale_media(
+            input_path=params["input_path"],
+            output_path=params["output_path"],
+            max_long_side=int(params["max_long_side"]) if params.get("max_long_side") is not None else None,
+            max_short_side=int(params["max_short_side"]) if params.get("max_short_side") is not None else None,
+            upscale=bool(params.get("upscale", False)),
+        )
+
     if operation == "stack_media":
         return engine.stack_media(
             path1=params["path1"],
