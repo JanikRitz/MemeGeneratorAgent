@@ -1,0 +1,32 @@
+{
+  "pipeline": [
+    {
+      "operation": "trim_video",
+      "params": {
+        "input_path": "media/source.mp4",
+        "start_sec": 1.0,
+        "end_sec": 5.0,
+        "output_path": "render/part1.mp4"
+      }
+    },
+    {
+      "operation": "apply_multi_text_overlays",
+      "params": {
+        "base_media_path": "$last_output",
+        "output_path": "render/part1_captioned.mp4",
+        "overlay_dir": "render",
+        "overlays": [
+          {
+            "overlay_name": "part1_top.png",
+            "text": "**When the build passes**",
+            "start_time": 0.0,
+            "end_time": 4.0,
+            "position": ["center", "top"],
+            "width": 1280,
+            "height": 220
+          }
+        ]
+      }
+    }
+  ]
+}

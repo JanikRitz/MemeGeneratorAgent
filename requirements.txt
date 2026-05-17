@@ -1,0 +1,4 @@
+moviepy>=1.0.3
+Pillow>=10.0.0
+pydantic>=2.0.0
+openai>=1.0.0

@@ -1,0 +1,167 @@
+# Meme Generator Skill
+
+This skill runs JSON-based meme jobs using Python + MoviePy + Pillow.
+
+## Purpose
+
+Use this skill when you want to:
+- Trim a video segment.
+- Stack two images/videos horizontally or vertically.
+- Concatenate clips in sequence.
+- Render styled text overlays (Markdown or HTML inline styles).
+- Apply multiple timed text overlays to a base video/image.
+
+Outputs are written to `render/` and logs to `logs/`.
+Overlay PNG assets are preserved (not deleted) in `render/` by default.
+
+## Runtime Assumptions
+
+- Python environment is managed by the user.
+- Dependencies are installed from `requirements.txt`.
+- `ffmpeg` is available in Windows `PATH`.
+- Paths in JSON are either:
+  - relative to project root, or
+  - absolute Windows paths.
+
+## Entry Command
+
+Run a job config:
+
+```powershell
+python .github/scripts/run_meme_job.py --config config/example_overlay.json
+```
+
+The command prints the final output path and writes a timestamped run log file.
+
+## JSON Job Formats
+
+### 1) Single operation
+
+```json
+{
+  "operation": "trim_video",
+  "params": {
+    "input_path": "media/input.mp4",
+    "start_sec": 2.0,
+    "end_sec": 8.0,
+    "output_path": "render/trimmed.mp4"
+  }
+}
+```
+
+### 2) Pipeline operation
+
+```json
+{
+  "pipeline": [
+    {
+      "operation": "trim_video",
+      "params": {
+        "input_path": "media/source.mp4",
+        "start_sec": 1.0,
+        "end_sec": 5.0,
+        "output_path": "render/part1.mp4"
+      }
+    },
+    {
+      "operation": "apply_multi_text_overlays",
+      "params": {
+        "base_media_path": "$last_output",
+        "output_path": "render/part1_captioned.mp4",
+        "overlay_dir": "render",
+        "overlays": [
+          {
+            "overlay_name": "top.png",
+            "text": "**HELLO** [color=#ff3333]WORLD[/color]",
+            "start_time": 0.0,
+            "end_time": 3.0,
+            "position": ["center", "top"],
+            "width": 1280,
+            "height": 240,
+            "text_align": "center",
+            "text_vertical_align": "center",
+            "text_padding": 24,
+            "font_size": 72,
+            "stroke_width": 4,
+            "stroke_fill": "#000000",
+            "shadow_enabled": true
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+`$last_output` in pipelines is replaced by the previous step's output path.
+
+## Supported Operations
+
+### `trim_video`
+- Params: `input_path`, `start_sec`, `end_sec`, `output_path`
+
+### `stack_media`
+- Params: `path1`, `path2`, `output_path`
+- Optional: `orientation` (`horizontal` or `vertical`), `duration_sec` (for still images)
+
+### `concatenate_clips`
+- Params: `clip_paths` (array), `output_path`
+
+### `generate_text_overlay`
+- Params: `text_data`, `video_width`, `video_height`, `output_path`
+- Optional style params: `horizontal_align`, `vertical_align`, `padding`, `stroke_width`, `stroke_fill`, `shadow_enabled`
+
+### `apply_multi_text_overlays`
+- Params: `base_media_path`, `overlays`, `output_path`
+- Optional: `overlay_dir`, `output_duration_sec` (used for image bases)
+
+Each overlay item can include:
+- `overlay_name` (png filename)
+- `text` (Markdown or HTML)
+- `start_time`, `end_time`
+- `position` (e.g. `["center", "top"]`, `["center", "bottom"]`, `[120, 480]`)
+- `width`, `height`
+- `text_align` (`left`, `center`, `right`)
+- `text_vertical_align` (`top`, `center`, `bottom`)
+- `text_padding` (pixels)
+- `font_size`
+- `stroke_width`
+- `stroke_fill`
+- `shadow_enabled`
+
+## Text Syntax
+
+### Markdown-like
+- Bold: `**word**`
+- Italic: `*word*`
+- Color: `[color=#ff3333]word[/color]`
+
+### HTML-like
+- Bold: `<b>word</b>` or `<strong>word</strong>`
+- Italic: `<i>word</i>` or `<em>word</em>`
+- Color: `<span style="color:#00ccff">word</span>`
+
+## Troubleshooting
+
+- Text not visible:
+  - Increase `font_size`.
+  - Keep `stroke_width` >= 3 and `stroke_fill` dark.
+  - Ensure overlay `start_time`/`end_time` overlap the base clip duration.
+- Text location looks wrong:
+  - Adjust `position` (overlay placement in video).
+  - Adjust `text_align` and `text_vertical_align` (text placement inside the PNG canvas).
+  - Increase/decrease `width`, `height`, and `text_padding`.
+- Paths not found:
+  - Verify relative paths are project-root relative.
+  - Use absolute Windows paths when needed.
+
+## Recommended Defaults
+
+For meme top/bottom captions:
+- `position`: top/bottom center
+- `width`: full video width
+- `height`: ~18-25% of video height
+- `text_align`: center
+- `text_vertical_align`: center
+- `stroke_width`: 4
+- `shadow_enabled`: true

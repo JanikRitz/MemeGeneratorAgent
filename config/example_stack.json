@@ -1,0 +1,10 @@
+{
+  "operation": "stack_media",
+  "params": {
+    "path1": "media/left.mp4",
+    "path2": "media/right.jpg",
+    "orientation": "horizontal",
+    "duration_sec": 5.0,
+    "output_path": "render/stacked.mp4"
+  }
+}
