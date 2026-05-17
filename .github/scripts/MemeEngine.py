@@ -31,6 +31,56 @@ class MemeEngine:
         self.logger = logger or logging.getLogger("meme_engine")
         self.renderer = RichTextRenderer()
 
+    def _clip_with_position(self, clip, position):
+        if hasattr(clip, "with_position"):
+            return clip.with_position(position)
+        return clip.set_position(position)
+
+    def _clip_with_start(self, clip, start_time: float):
+        if hasattr(clip, "with_start"):
+            return clip.with_start(start_time)
+        return clip.set_start(start_time)
+
+    def _clip_with_end(self, clip, end_time: float):
+        if hasattr(clip, "with_end"):
+            return clip.with_end(end_time)
+        return clip.set_end(end_time)
+
+    def _clip_with_duration(self, clip, duration: float):
+        if hasattr(clip, "with_duration"):
+            return clip.with_duration(duration)
+        return clip.set_duration(duration)
+
+    def _clip_with_audio(self, clip, audio_clip):
+        if audio_clip is None:
+            return clip
+        if hasattr(clip, "with_audio"):
+            return clip.with_audio(audio_clip)
+        return clip.set_audio(audio_clip)
+
+    def get_media_info(self, input_path: str) -> Dict[str, Any]:
+        media_path = self.resolve_path(input_path)
+        info: Dict[str, Any] = {
+            "path": str(media_path),
+            "is_video": self._is_video(media_path),
+            "width": None,
+            "height": None,
+            "duration_sec": None,
+        }
+
+        if info["is_video"]:
+            with VideoFileClip(str(media_path)) as clip:
+                info["width"] = int(clip.w)
+                info["height"] = int(clip.h)
+                info["duration_sec"] = float(clip.duration)
+        else:
+            with ImageClip(str(media_path)) as clip:
+                info["width"] = int(clip.w)
+                info["height"] = int(clip.h)
+
+        self.logger.info("get_media_info path=%s width=%s height=%s duration=%s", media_path, info["width"], info["height"], info["duration_sec"])
+        return info
+
     def _is_video(self, path: Path) -> bool:
         return path.suffix.lower() in {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
@@ -60,7 +110,7 @@ class MemeEngine:
         self.logger.info("trim_video input=%s start=%s end=%s output=%s", in_p, start_sec, end_sec, out_p)
         
         with VideoFileClip(str(in_p)) as clip:
-            trimmed = clip.subclip(start_sec, end_sec)
+            trimmed = clip.subclipped(start_sec, end_sec)
             trimmed.write_videofile(str(out_p), codec="libx264", audio_codec="aac")
         return str(out_p)
 
@@ -118,20 +168,38 @@ class MemeEngine:
     def generate_text_overlay(
         self,
         text_data: str,
-        video_width: int,
-        video_height: int,
+        video_width: Optional[int],
+        video_height: Optional[int],
         output_path: str,
+        media_path: Optional[str] = None,
         horizontal_align: str = "center",
         vertical_align: str = "center",
         padding: int = 24,
         stroke_width: int = 3,
         stroke_fill: str = "#000000",
         shadow_enabled: bool = True,
+        font_size: Optional[int] = None,
+        background_color: Any = "transparent",
+        line_height: float = 1.0,
     ) -> str:
+        if media_path:
+            media_info = self.get_media_info(media_path)
+            if not video_width:
+                video_width = int(media_info["width"])
+            if not video_height:
+                video_height = int(media_info["height"])
+
+        if not video_width or not video_height:
+            raise ValueError("video_width and video_height are required when media_path is not provided")
+
         out_p = self.resolve_output_path(output_path)
-        self.logger.info("generate_text_overlay output=%s width=%s height=%s", out_p, video_width, video_height)
+        self.logger.info("generate_text_overlay output=%s width=%s height=%s media_path=%s", out_p, video_width, video_height, media_path)
         tokens = self.renderer.parse_tokens(text_data)
-        canvas = self.renderer.generate_canvas(
+        if font_size:
+            for token in tokens:
+                token.setdefault("size", int(font_size))
+
+        canvas, metrics = self.renderer.generate_canvas(
             tokens,
             video_width,
             video_height,
@@ -141,8 +209,137 @@ class MemeEngine:
             stroke_width=stroke_width,
             stroke_fill=stroke_fill,
             shadow_enabled=shadow_enabled,
+            background_fill=background_color,
+            line_height=line_height,
+            return_metrics=True,
         )
         canvas.save(str(out_p), format="PNG")
+        if metrics.get("overflowed"):
+            self.logger.warning(
+                "generate_text_overlay truncated text: output=%s rendered_lines=%s total_lines=%s truncated_lines=%s",
+                out_p,
+                metrics.get("rendered_lines"),
+                metrics.get("total_lines"),
+                metrics.get("truncated_lines"),
+            )
+        return str(out_p)
+
+    def add_text_side_box(
+        self,
+        base_media_path: str,
+        text_data: str,
+        side: str,
+        output_path: str,
+        overlay_dir: str = "render",
+        box_size_px: Optional[int] = None,
+        box_size_ratio: float = 0.22,
+        background_color: Any = "#101010",
+        text_align: str = "center",
+        text_vertical_align: str = "center",
+        text_padding: int = 24,
+        font_size: Optional[int] = None,
+        stroke_width: int = 3,
+        stroke_fill: str = "#000000",
+        shadow_enabled: bool = True,
+        output_duration_sec: Optional[float] = None,
+        panel_png_name: Optional[str] = None,
+        preview_only: bool = False,
+        line_height: float = 1.0,
+    ) -> str:
+        base_path = self.resolve_path(base_media_path)
+        out_p = self.resolve_output_path(output_path)
+        overlay_root = self.resolve_output_path(overlay_dir)
+        overlay_root.mkdir(parents=True, exist_ok=True)
+
+        side_value = str(side).lower()
+        if side_value not in {"top", "bottom", "left", "right"}:
+            raise ValueError("side must be one of: top, bottom, left, right")
+
+        media_is_video = self._is_video(base_path)
+        if media_is_video:
+            base_clip = VideoFileClip(str(base_path))
+            duration = float(base_clip.duration)
+        else:
+            duration = float(output_duration_sec or 5.0)
+            base_clip = self._clip_with_duration(ImageClip(str(base_path)), duration)
+
+        base_w = int(base_clip.w)
+        base_h = int(base_clip.h)
+
+        if side_value in {"top", "bottom"}:
+            panel_size = int(box_size_px if box_size_px else round(base_h * float(box_size_ratio)))
+            panel_w, panel_h = base_w, max(1, panel_size)
+            final_w, final_h = base_w, base_h + panel_h
+            base_position = (0, panel_h) if side_value == "top" else (0, 0)
+            panel_position = (0, 0) if side_value == "top" else (0, base_h)
+        else:
+            panel_size = int(box_size_px if box_size_px else round(base_w * float(box_size_ratio)))
+            panel_w, panel_h = max(1, panel_size), base_h
+            final_w, final_h = base_w + panel_w, base_h
+            base_position = (panel_w, 0) if side_value == "left" else (0, 0)
+            panel_position = (0, 0) if side_value == "left" else (base_w, 0)
+
+        tokens = self.renderer.parse_tokens(text_data)
+        if font_size:
+            for token in tokens:
+                token.setdefault("size", int(font_size))
+
+        panel_canvas, metrics = self.renderer.generate_canvas(
+            tokens,
+            panel_w,
+            panel_h,
+            horizontal_align=text_align,
+            vertical_align=text_vertical_align,
+            padding=int(text_padding),
+            stroke_width=int(stroke_width),
+            stroke_fill=stroke_fill,
+            shadow_enabled=bool(shadow_enabled),
+            background_fill=background_color,
+            line_height=line_height,
+            return_metrics=True,
+        )
+
+        png_name = panel_png_name or f"side_box_{side_value}.png"
+        panel_png_path = overlay_root / png_name
+        panel_canvas.save(str(panel_png_path), format="PNG")
+
+        if metrics.get("overflowed"):
+            self.logger.warning(
+                "add_text_side_box truncated text: panel_png=%s rendered_lines=%s total_lines=%s truncated_lines=%s",
+                panel_png_path,
+                metrics.get("rendered_lines"),
+                metrics.get("total_lines"),
+                metrics.get("truncated_lines"),
+            )
+
+        if preview_only:
+            self.logger.info(
+                "add_text_side_box preview_only enabled, skipping video render and returning panel png=%s",
+                panel_png_path,
+            )
+            return str(panel_png_path)
+
+        base_layer = self._clip_with_position(base_clip, base_position)
+        panel_layer = self._clip_with_position(
+            self._clip_with_duration(ImageClip(str(panel_png_path)), duration),
+            panel_position,
+        )
+
+        composite = CompositeVideoClip([base_layer, panel_layer], size=(final_w, final_h))
+        composite = self._clip_with_audio(composite, getattr(base_clip, "audio", None))
+
+        self.logger.info(
+            "add_text_side_box base=%s side=%s panel=%sx%s final=%sx%s output=%s panel_png=%s",
+            base_path,
+            side_value,
+            panel_w,
+            panel_h,
+            final_w,
+            final_h,
+            out_p,
+            panel_png_path,
+        )
+        composite.write_videofile(str(out_p), codec="libx264", audio_codec="aac")
         return str(out_p)
 
     def apply_multi_text_overlays(
@@ -189,6 +386,10 @@ class MemeEngine:
             start_time = float(item.get("start_time", 0.0))
             end_time = float(item.get("end_time", composition_duration))
             position = self._normalize_position(item.get("position", ["center", "top"]))
+            if bool(item.get("match_base_size", False)):
+                width = int(base_clip.w)
+                height = int(base_clip.h)
+                position = (0, 0)
             text_align = str(item.get("text_align", "center")).lower()
             text_vertical_align = str(item.get("text_vertical_align", "center")).lower()
             text_padding = int(item.get("text_padding", 24))
@@ -196,6 +397,8 @@ class MemeEngine:
             stroke_fill = item.get("stroke_fill", "#000000")
             shadow_enabled = bool(item.get("shadow_enabled", True))
             font_size = int(item.get("font_size", self.renderer.default_size))
+            background_color = item.get("background_color", "transparent")
+            line_height = float(item.get("line_height", 1.0))
 
             overlay_name = item.get("overlay_name", f"overlay_{index:03d}.png")
             overlay_path = overlay_root / overlay_name
@@ -204,7 +407,7 @@ class MemeEngine:
             for token in tokens:
                 token.setdefault("size", font_size)
 
-            canvas = self.renderer.generate_canvas(
+            canvas, metrics = self.renderer.generate_canvas(
                 tokens,
                 width,
                 height,
@@ -214,14 +417,28 @@ class MemeEngine:
                 stroke_width=stroke_width,
                 stroke_fill=stroke_fill,
                 shadow_enabled=shadow_enabled,
+                background_fill=background_color,
+                line_height=line_height,
+                return_metrics=True,
             )
             canvas.save(str(overlay_path), format="PNG")
 
-            overlay_clip = (
-                ImageClip(str(overlay_path))
-                .with_start(start_time)
-                .with_end(end_time)
-                .with_position(position)
+            if metrics.get("overflowed"):
+                self.logger.warning(
+                    "overlay index=%s truncated text: png=%s rendered_lines=%s total_lines=%s truncated_lines=%s",
+                    index,
+                    overlay_path,
+                    metrics.get("rendered_lines"),
+                    metrics.get("total_lines"),
+                    metrics.get("truncated_lines"),
+                )
+
+            overlay_clip = self._clip_with_position(
+                self._clip_with_end(
+                    self._clip_with_start(ImageClip(str(overlay_path)), start_time),
+                    end_time,
+                ),
+                position,
             )
             layered_clips.append(overlay_clip)
             self.logger.info(

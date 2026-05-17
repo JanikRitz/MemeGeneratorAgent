@@ -4,7 +4,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 class RichTextRenderer:
     def __init__(self, default_font_path=r"C:\\Windows\\Fonts\\impact.ttf", default_size=40):
@@ -58,6 +58,15 @@ class RichTextRenderer:
         return re.findall(r"\S+\s*|\n", text)
 
     def _to_rgba(self, color: Any, default: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
+        if isinstance(color, str):
+            value = color.strip().lower()
+            if value == "transparent":
+                return 0, 0, 0, 0
+            try:
+                parsed = ImageColor.getcolor(color.strip(), "RGBA")
+                return int(parsed[0]), int(parsed[1]), int(parsed[2]), int(parsed[3])
+            except ValueError:
+                return default
         if isinstance(color, (tuple, list)):
             if len(color) == 4:
                 return int(color[0]), int(color[1]), int(color[2]), int(color[3])
@@ -177,20 +186,33 @@ class RichTextRenderer:
         vertical_align: str = "center",
         padding: int = 24,
         line_spacing: int = None,
+        paragraph_spacing: int = None,
+        line_height: float = 1.0,
         stroke_width: int = 3,
         stroke_fill: str = "#000000",
         shadow_enabled: bool = True,
         shadow_offset: Tuple[int, int] = (2, 2),
         shadow_fill: Any = (0, 0, 0, 180),
-    ) -> Image.Image:
-        canvas = Image.new("RGBA", (container_width, container_height), (0, 0, 0, 0))
+        background_fill: Any = (0, 0, 0, 0),
+        return_metrics: bool = False,
+    ):
+        canvas = Image.new(
+            "RGBA",
+            (container_width, container_height),
+            self._to_rgba(background_fill, (0, 0, 0, 0)),
+        )
         draw = ImageDraw.Draw(canvas)
-
-        if line_spacing is None:
-            line_spacing = int(self.default_size * 0.3)
 
         shadow_rgba = self._to_rgba(shadow_fill, (0, 0, 0, 180))
         max_width = max(1, int(container_width - (padding * 2)))
+        line_height = max(0.6, float(line_height))
+
+        font_sizes = [int(token.get("size", self.default_size)) for token in structured_text if token.get("text")]
+        avg_font_size = max(8, int(sum(font_sizes) / len(font_sizes))) if font_sizes else self.default_size
+        if line_spacing is None:
+            line_spacing = max(2, int(round(avg_font_size * 0.16)))
+        if paragraph_spacing is None:
+            paragraph_spacing = max(line_spacing + 2, int(round(avg_font_size * 0.34)))
 
         segments = []
         for token in structured_text:
@@ -214,12 +236,18 @@ class RichTextRenderer:
         lines: List[List[Dict]] = [[]]
         line_widths: List[int] = [0]
         line_heights: List[int] = [self.default_size]
+        line_break_after: List[str] = ["end"]
+        explicit_break_count = 0
+        wrap_break_count = 0
 
         for segment in segments:
             if segment.get("newline"):
+                explicit_break_count += 1
+                line_break_after[-1] = "explicit"
                 lines.append([])
                 line_widths.append(0)
                 line_heights.append(self.default_size)
+                line_break_after.append("end")
                 continue
 
             style = segment["style"]
@@ -230,22 +258,34 @@ class RichTextRenderer:
 
             current_idx = len(lines) - 1
             if line_widths[current_idx] + seg_w > max_width and line_widths[current_idx] > 0:
+                wrap_break_count += 1
+                line_break_after[-1] = "wrap"
                 lines.append([])
                 line_widths.append(0)
                 line_heights.append(self.default_size)
+                line_break_after.append("end")
                 current_idx += 1
 
             lines[current_idx].append({"text": segment["text"], "style": style, "font": font, "w": seg_w, "h": seg_h})
             line_widths[current_idx] += seg_w
             line_heights[current_idx] = max(line_heights[current_idx], seg_h)
 
-        total_text_height = sum(line_heights) + (max(0, len(lines) - 1) * line_spacing)
+        total_text_height = 0
+        for idx, line_h in enumerate(line_heights):
+            total_text_height += max(1, int(round(line_h * line_height)))
+            if idx < len(lines) - 1:
+                gap = paragraph_spacing if line_break_after[idx] == "explicit" else line_spacing
+                total_text_height += gap
+
         if vertical_align == "bottom":
             y = max(padding, container_height - padding - total_text_height)
         elif vertical_align == "top":
             y = padding
         else:
             y = max(padding, int((container_height - total_text_height) / 2))
+
+        overflowed = False
+        rendered_lines = 0
 
         for idx, line in enumerate(lines):
             line_w = line_widths[idx]
@@ -282,9 +322,33 @@ class RichTextRenderer:
                 )
                 x += chunk["w"]
 
-            y += line_h + line_spacing
+            rendered_lines += 1
 
-            if y >= container_height - padding:
+            if idx == len(lines) - 1:
+                continue
+
+            gap = paragraph_spacing if line_break_after[idx] == "explicit" else line_spacing
+            next_y = y + max(1, int(round(line_h * line_height))) + gap
+            if next_y > container_height - padding:
+                overflowed = True
                 break
+            y = next_y
 
+        if rendered_lines < len(lines):
+            overflowed = True
+
+        metrics = {
+            "overflowed": overflowed,
+            "rendered_lines": rendered_lines,
+            "total_lines": len(lines),
+            "truncated_lines": max(0, len(lines) - rendered_lines),
+            "line_spacing": int(line_spacing),
+            "paragraph_spacing": int(paragraph_spacing),
+            "line_height": float(line_height),
+            "wrap_break_count": int(wrap_break_count),
+            "explicit_break_count": int(explicit_break_count),
+        }
+
+        if return_metrics:
+            return canvas, metrics
         return canvas

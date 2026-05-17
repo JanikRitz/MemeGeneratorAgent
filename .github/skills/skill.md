@@ -10,6 +10,9 @@ Use this skill when you want to:
 - Concatenate clips in sequence.
 - Render styled text overlays (Markdown or HTML inline styles).
 - Apply multiple timed text overlays to a base video/image.
+- Generate full-frame overlay PNGs that can be applied directly without scaling.
+- Add a top/bottom/left/right text side-box while keeping the full original video visible.
+- Query media width/height/duration so the agent can auto-build correct configs.
 
 Outputs are written to `render/` and logs to `logs/`.
 Overlay PNG assets are preserved (not deleted) in `render/` by default.
@@ -28,7 +31,19 @@ Overlay PNG assets are preserved (not deleted) in `render/` by default.
 Run a job config:
 
 ```powershell
-python .github/scripts/run_meme_job.py --config config/example_overlay.json
+uv run .github/scripts/run_meme_job.py --config config/example_overlay.json
+```
+
+Force preview-only mode from CLI (without editing config):
+
+```powershell
+uv run .github/scripts/run_meme_job.py --config config/example_side_box_right.json --preview-only
+```
+
+Positional config path also works:
+
+```powershell
+uv run .github/scripts/run_meme_job.py config/example_overlay.json
 ```
 
 The command prints the final output path and writes a timestamped run log file.
@@ -109,7 +124,10 @@ The command prints the final output path and writes a timestamped run log file.
 
 ### `generate_text_overlay`
 - Params: `text_data`, `video_width`, `video_height`, `output_path`
-- Optional style params: `horizontal_align`, `vertical_align`, `padding`, `stroke_width`, `stroke_fill`, `shadow_enabled`
+- Optional sizing params:
+  - `media_path` (recommended): auto-uses media width/height so PNG matches source exactly
+  - `video_width`, `video_height` (manual fallback)
+- Optional style params: `horizontal_align`, `vertical_align`, `padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `background_color`
 
 ### `apply_multi_text_overlays`
 - Params: `base_media_path`, `overlays`, `output_path`
@@ -125,9 +143,27 @@ Each overlay item can include:
 - `text_vertical_align` (`top`, `center`, `bottom`)
 - `text_padding` (pixels)
 - `font_size`
+- `line_height` (float, default `1.0`; lower values tighten wrapped line distance)
 - `stroke_width`
 - `stroke_fill`
 - `shadow_enabled`
+- `background_color` (default transparent)
+- `match_base_size` (bool): make PNG exactly base media size and force overlay position `(0,0)`
+
+### `add_text_side_box`
+- Params: `base_media_path`, `text_data`, `side`, `output_path`
+- Optional: `overlay_dir`, `box_size_px`, `box_size_ratio`, `background_color`, `text_align`, `text_vertical_align`, `text_padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `output_duration_sec`, `panel_png_name`
+- Optional: `preview_only` (bool)
+- Behavior:
+  - Expands output canvas at the chosen side (`top`, `bottom`, `left`, `right`)
+  - Keeps full original video visible (no crop, no scale)
+  - Saves panel PNG in `overlay_dir`
+  - Wraps text to panel width
+  - If `preview_only=true`, skips video render and only returns the generated panel PNG path
+
+### `get_media_info`
+- Params: `input_path`
+- Returns JSON string with `width`, `height`, `duration_sec`, and `is_video`
 
 ## Text Syntax
 
@@ -151,9 +187,22 @@ Each overlay item can include:
   - Adjust `position` (overlay placement in video).
   - Adjust `text_align` and `text_vertical_align` (text placement inside the PNG canvas).
   - Increase/decrease `width`, `height`, and `text_padding`.
+- Overlay PNG should match source exactly:
+  - Use `generate_text_overlay` with `media_path`.
+  - Or set `match_base_size: true` for an item in `apply_multi_text_overlays`.
 - Paths not found:
   - Verify relative paths are project-root relative.
   - Use absolute Windows paths when needed.
+- Text gets cut off:
+  - The renderer logs a warning with rendered and truncated line counts.
+  - Increase panel size (`box_size_px`/`box_size_ratio`) or reduce `font_size`/padding.
+
+## Quick Examples
+
+- Full-frame overlay PNG from media dimensions: `config/example_overlay_fullframe.json`
+- Side text box composition: `config/example_side_box_right.json`
+- Side text box fast preview (PNG only): `config/example_side_box_preview.json`
+- Media metadata query: `config/example_media_info.json`
 
 ## Recommended Defaults
 

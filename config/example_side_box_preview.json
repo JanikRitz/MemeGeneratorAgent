@@ -1,0 +1,21 @@
+{
+  "operation": "add_text_side_box",
+  "params": {
+    "base_media_path": "media/base.mp4",
+    "text_data": "**MEME CONTEXT**\nThis preview only generates the panel PNG so text fitting iterations are fast.",
+    "side": "right",
+    "output_path": "render/with_right_box.mp4",
+    "overlay_dir": "render",
+    "box_size_ratio": 0.28,
+    "background_color": "#101010",
+    "text_align": "left",
+    "text_vertical_align": "center",
+    "text_padding": 28,
+    "font_size": 24,
+    "stroke_width": 2,
+    "stroke_fill": "#000000",
+    "shadow_enabled": true,
+    "panel_png_name": "right_panel_preview.png",
+    "preview_only": true
+  }
+}
