@@ -2,7 +2,7 @@
   "operation": "add_text_side_box",
   "params": {
     "base_media_path": "media/examples/image.jpeg",
-    "text_data": "<span style=\"color:#000000\">Girls be Girls</span>",
+    "text_data": "[color=#000]Girls be Girls[/color]",
     "side": "top",
     "output_path": "render/examples/image_top_box.png",
     "output_duration_sec": 5.0,

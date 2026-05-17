@@ -118,7 +118,8 @@ class RichTextRenderer:
             )
             if color_open:
                 flush_buffer()
-                current["color"] = color_open.group(1)
+                # Convert the color value to RGBA format
+                current["color"] = self._to_rgba(color_open.group(1), (255, 255, 255, 255))
                 i += len(color_open.group(0))
                 continue
 
