@@ -99,12 +99,13 @@ def execute_step(
         if preview_only_override is not None:
             preview_only = preview_only_override
 
+        overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
         return engine.add_text_side_box(
             base_media_path=params["base_media_path"],
             text_data=params["text_data"],
             side=params["side"],
             output_path=params["output_path"],
-            overlay_dir=params.get("overlay_dir", "render"),
+            overlay_dir=overlay_dir,
             box_size_px=int(params["box_size_px"]) if params.get("box_size_px") is not None else None,
             box_size_ratio=float(params.get("box_size_ratio", 0.22)),
             background_color=params.get("background_color", "#101010"),
@@ -125,15 +126,42 @@ def execute_step(
         )
 
     if operation == "apply_multi_text_overlays":
+        overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
         return engine.apply_multi_text_overlays(
             base_media_path=params["base_media_path"],
             overlays=params["overlays"],
             output_path=params["output_path"],
-            overlay_dir=params.get("overlay_dir", "render"),
+            overlay_dir=overlay_dir,
             output_duration_sec=params.get("output_duration_sec"),
         )
 
     raise ValueError(f"Unsupported operation: {operation}")
+
+
+def rewrite_media_paths(obj: Any, project_root: Path) -> Any:
+    if isinstance(obj, dict):
+        return {k: rewrite_media_paths(v, project_root) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [rewrite_media_paths(item, project_root) for item in obj]
+    if isinstance(obj, str):
+        for prefix in ("media/", "render/", "logs/", "config/"):
+            if obj.startswith(prefix):
+                return str(project_root / obj)
+        return obj
+    return obj
+
+
+def get_output_path_from_config(cfg: Dict[str, Any]) -> Optional[Path]:
+    if "pipeline" in cfg:
+        for step in reversed(cfg["pipeline"]):
+            params = step.get("params", {})
+            if "output_path" in params:
+                return Path(params["output_path"])
+    else:
+        params = cfg.get("params", cfg)
+        if "output_path" in params:
+            return Path(params["output_path"])
+    return None
 
 
 def main() -> None:
@@ -152,12 +180,70 @@ def main() -> None:
         parser.error("Provide --config <path> or a positional config path")
 
     config_path = Path(config_arg)
+    if config_path.is_dir():
+        config_files = sorted(config_path.glob("*.json"))
+        if not config_files:
+            print(f"No JSON config files found in {config_path}")
+            return
+
+        project_root = config_path.resolve().parents[1]
+
+        for cfg_file in config_files:
+            with cfg_file.open("r", encoding="utf-8") as fh:
+                try:
+                    config = json.load(fh)
+                except Exception as e:
+                    print(f"Failed to load {cfg_file}: {e}")
+                    continue
+
+            config = rewrite_media_paths(config, project_root)
+
+            output_path = get_output_path_from_config(config)
+            if output_path and output_path.exists():
+                if output_path.stat().st_mtime > cfg_file.stat().st_mtime:
+                    print(f"Skipping {cfg_file} (output newer than config)")
+                    continue
+
+            logger = setup_logging(project_root / "logs")
+            engine = MemeEngine(base_dir=str(project_root), logger=logger)
+
+            print(f"Running config: {cfg_file}")
+            try:
+                if "pipeline" in config:
+                    logger.info("Running pipeline with %s steps", len(config["pipeline"]))
+                    last_output = ""
+                    for index, step in enumerate(config["pipeline"]):
+                        logger.info("Executing step %s: %s", index, step.get("operation"))
+                        last_output = execute_step(
+                            engine,
+                            step,
+                            last_output=last_output,
+                            preview_only_override=(True if args.preview_only else None),
+                        )
+                        logger.info("Step %s output: %s", index, last_output)
+                    print(last_output)
+                else:
+                    logger.info("Running single operation: %s", config.get("operation"))
+                    output = execute_step(
+                        engine,
+                        config,
+                        preview_only_override=(True if args.preview_only else None),
+                    )
+                    logger.info("Operation output: %s", output)
+                    print(output)
+            except Exception as e:
+                print(f"Error running {cfg_file}: {e}")
+        return
+
+    # Single file mode (original logic)
     with config_path.open("r", encoding="utf-8") as fh:
         config = json.load(fh)
 
-    project_root = Path(config_path).resolve().parents[1]
-    logger = setup_logging(project_root / "logs")
+    project_root = Path(config_path).resolve().parents[2]
 
+    config = rewrite_media_paths(config, project_root)
+
+    logger = setup_logging(project_root / "logs")
     engine = MemeEngine(base_dir=str(project_root), logger=logger)
 
     if "pipeline" in config:

@@ -1,5 +1,6 @@
 import html
 import logging
+import math
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -244,6 +245,8 @@ class RichTextRenderer:
         lines: List[List[Dict]] = [[]]
         line_widths: List[int] = [0]
         line_heights: List[int] = [self.default_size]
+        line_tops: List[int] = [0]
+        line_bottoms: List[int] = [self.default_size]
         line_break_after: List[str] = ["end"]
         line_start_reason: List[str] = ["start"]
         explicit_break_count = 0
@@ -256,6 +259,8 @@ class RichTextRenderer:
                 lines.append([])
                 line_widths.append(0)
                 line_heights.append(self.default_size)
+                line_tops.append(0)
+                line_bottoms.append(self.default_size)
                 line_break_after.append("end")
                 line_start_reason.append("explicit")
                 continue
@@ -263,11 +268,25 @@ class RichTextRenderer:
             style = segment["style"]
             font = self._load_font(style["bold"], style["italic"], style["size"])
             seg_text = segment["text"]
-            bbox = draw.textbbox((0, 0), seg_text, font=font)
+            bbox = draw.textbbox((0, 0), seg_text, font=font, stroke_width=max(0, int(stroke_width)))
             # Use advance-based length (not ink bbox) so leading/trailing spaces
             # between styled spans contribute correct horizontal advance.
-            seg_w = int(draw.textlength(seg_text, font=font))
-            seg_h = bbox[3] - bbox[1]
+            seg_advance_w = float(draw.textlength(seg_text, font=font))
+
+            seg_left = int(bbox[0])
+            seg_top = int(bbox[1])
+            seg_right = int(bbox[2])
+            seg_bottom = int(bbox[3])
+            if shadow_enabled:
+                shadow_dx = int(shadow_offset[0])
+                shadow_dy = int(shadow_offset[1])
+                seg_left = min(seg_left, seg_left + shadow_dx)
+                seg_top = min(seg_top, seg_top + shadow_dy)
+                seg_right = max(seg_right, seg_right + shadow_dx)
+                seg_bottom = max(seg_bottom, seg_bottom + shadow_dy)
+
+            seg_w = int(math.ceil(max(seg_advance_w, float(seg_right - seg_left))))
+            seg_h = max(1, int(seg_bottom - seg_top))
 
             current_idx = len(lines) - 1
             if line_widths[current_idx] + seg_w > max_width and line_widths[current_idx] > 0:
@@ -276,12 +295,31 @@ class RichTextRenderer:
                 lines.append([])
                 line_widths.append(0)
                 line_heights.append(self.default_size)
+                line_tops.append(0)
+                line_bottoms.append(self.default_size)
                 line_break_after.append("end")
                 line_start_reason.append("wrap")
                 current_idx += 1
                 # Strip leading space from a segment that begins a new wrapped line.
                 seg_text = seg_text.lstrip(" \t")
-                seg_w = int(draw.textlength(seg_text, font=font)) if seg_text else 0
+                if seg_text:
+                    bbox = draw.textbbox((0, 0), seg_text, font=font, stroke_width=max(0, int(stroke_width)))
+                    seg_advance_w = float(draw.textlength(seg_text, font=font))
+                    seg_left = int(bbox[0])
+                    seg_top = int(bbox[1])
+                    seg_right = int(bbox[2])
+                    seg_bottom = int(bbox[3])
+                    if shadow_enabled:
+                        shadow_dx = int(shadow_offset[0])
+                        shadow_dy = int(shadow_offset[1])
+                        seg_left = min(seg_left, seg_left + shadow_dx)
+                        seg_top = min(seg_top, seg_top + shadow_dy)
+                        seg_right = max(seg_right, seg_right + shadow_dx)
+                        seg_bottom = max(seg_bottom, seg_bottom + shadow_dy)
+                    seg_w = int(math.ceil(max(seg_advance_w, float(seg_right - seg_left))))
+                    seg_h = max(1, int(seg_bottom - seg_top))
+                else:
+                    seg_w = 0
 
             # Strip leading space on regular/wrapped line starts, but preserve
             # user-entered indentation after explicit newlines.
@@ -292,14 +330,37 @@ class RichTextRenderer:
                 and line_start_reason[current_idx] != "explicit"
             ):
                 seg_text = seg_text.lstrip(" \t")
-                seg_w = int(draw.textlength(seg_text, font=font)) if seg_text else 0
+                if seg_text:
+                    bbox = draw.textbbox((0, 0), seg_text, font=font, stroke_width=max(0, int(stroke_width)))
+                    seg_advance_w = float(draw.textlength(seg_text, font=font))
+                    seg_left = int(bbox[0])
+                    seg_top = int(bbox[1])
+                    seg_right = int(bbox[2])
+                    seg_bottom = int(bbox[3])
+                    if shadow_enabled:
+                        shadow_dx = int(shadow_offset[0])
+                        shadow_dy = int(shadow_offset[1])
+                        seg_left = min(seg_left, seg_left + shadow_dx)
+                        seg_top = min(seg_top, seg_top + shadow_dy)
+                        seg_right = max(seg_right, seg_right + shadow_dx)
+                        seg_bottom = max(seg_bottom, seg_bottom + shadow_dy)
+                    seg_w = int(math.ceil(max(seg_advance_w, float(seg_right - seg_left))))
+                    seg_h = max(1, int(seg_bottom - seg_top))
+                else:
+                    seg_w = 0
 
             if not seg_text:
                 continue
 
             lines[current_idx].append({"text": seg_text, "style": style, "font": font, "w": seg_w, "h": seg_h})
             line_widths[current_idx] += seg_w
-            line_heights[current_idx] = max(line_heights[current_idx], seg_h)
+            if len(lines[current_idx]) == 1:
+                line_tops[current_idx] = seg_top
+                line_bottoms[current_idx] = seg_bottom
+            else:
+                line_tops[current_idx] = min(line_tops[current_idx], seg_top)
+                line_bottoms[current_idx] = max(line_bottoms[current_idx], seg_bottom)
+            line_heights[current_idx] = max(1, int(line_bottoms[current_idx] - line_tops[current_idx]))
 
         total_text_height = 0
         for idx, line_h in enumerate(line_heights):
@@ -321,6 +382,7 @@ class RichTextRenderer:
         for idx, line in enumerate(lines):
             line_w = line_widths[idx]
             line_h = line_heights[idx]
+            line_top_offset = line_tops[idx]
             explicit_line_indent = int(paragraph_indent_px) if line_start_reason[idx] == "explicit" else 0
 
             if horizontal_align == "right":
@@ -335,17 +397,18 @@ class RichTextRenderer:
                 font = chunk["font"]
                 style = chunk["style"]
                 color = style["color"]
+                draw_y = y - line_top_offset
 
                 if shadow_enabled:
                     draw.text(
-                        (x + int(shadow_offset[0]), y + int(shadow_offset[1])),
+                        (x + int(shadow_offset[0]), draw_y + int(shadow_offset[1])),
                         text,
                         font=font,
                         fill=shadow_rgba,
                     )
 
                 draw.text(
-                    (x, y),
+                    (x, draw_y),
                     text,
                     font=font,
                     fill=color,

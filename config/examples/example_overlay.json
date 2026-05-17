@@ -2,40 +2,33 @@
   "operation": "apply_multi_text_overlays",
   "params": {
     "base_media_path": "media/base.mp4",
-    "output_path": "render/example_overlayed.mp4",
-    "overlay_dir": "render",
+    "output_path": "render/examples/overlayed.mp4",
     "overlays": [
       {
         "overlay_name": "headline.png",
         "text": "*TOP TEXT* WOW",
         "start_time": 0.0,
-        "end_time": 3.5,
-        "position": ["center", "center"],
-        "width": 640,
-        "height": 360,
+        "end_time": 4.5,
+        "match_base_size": true,
         "text_align": "center",
-        "text_vertical_align": "center",
-        "text_padding": 24,
-        "font_size": 72,
-        "stroke_width": 4,
-        "stroke_fill": "#000000",
-        "shadow_enabled": true
+        "text_vertical_align": "top",
+        "text_padding": 6,
+        "font_size": 52,
+        "stroke_width": 3,
+        "stroke_fill": "#000000"
       },
       {
         "overlay_name": "subline.png",
         "text": "<span style=\"color:#00ccff\"><i>bottom text</i></span>",
         "start_time": 3.5,
         "end_time": 7.0,
-        "position": ["center", "bottom"],
-        "width": 640,
-        "height": 360,
+        "match_base_size": true,
         "text_align": "center",
         "text_vertical_align": "bottom",
-        "text_padding": 24,
-        "font_size": 64,
-        "stroke_width": 4,
-        "stroke_fill": "#000000",
-        "shadow_enabled": true
+        "text_padding": 6,
+        "font_size": 52,
+        "stroke_width": 3,
+        "stroke_fill": "#000000"
       }
     ]
   }

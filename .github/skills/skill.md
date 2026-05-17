@@ -10,12 +10,10 @@ Use this skill when you want to:
 - Concatenate clips in sequence.
 - Render styled text overlays (Markdown or HTML inline styles).
 - Apply multiple timed text overlays to a base video/image.
-- Generate full-frame overlay PNGs that can be applied directly without scaling.
 - Add a top/bottom/left/right text side-box while keeping the full original video visible.
 - Query media width/height/duration with `get_media_info.py` so the agent can auto-build correct configs.
 
-Outputs are written to `render/` and logs to `logs/`.
-Overlay PNG assets are preserved (not deleted) in `render/` by default.
+Outputs are written to `render/` and logs to `logs/`. Intermediate overlay PNGs are saved alongside the final output file.
 
 ## Runtime Assumptions
 
@@ -34,19 +32,19 @@ Avoid calling `python` directly unless you explicitly need a specific interprete
 ### Run a job config
 
 ```powershell
-uv run .github/scripts/run_meme_job.py --config config/example_overlay.json
+uv run .github/scripts/run_meme_job.py --config config/examples/example_overlay.json
 ```
 
 Force preview-only mode from CLI (without editing config):
 
 ```powershell
-uv run .github/scripts/run_meme_job.py --config config/example_side_box_right.json --preview-only
+uv run .github/scripts/run_meme_job.py --config config/examples/example_side_box_right.json --preview-only
 ```
 
 Positional config path also works:
 
 ```powershell
-uv run .github/scripts/run_meme_job.py config/example_overlay.json
+uv run .github/scripts/run_meme_job.py config/examples/example_overlay.json
 ```
 
 The command prints the final output path and writes a timestamped run log file.
@@ -105,31 +103,23 @@ Outputs a JSON object to stdout:
         "input_path": "media/source.mp4",
         "start_sec": 1.0,
         "end_sec": 5.0,
-        "output_path": "render/part1.mp4"
+        "output_path": "render/examples/part1.mp4"
       }
     },
     {
       "operation": "apply_multi_text_overlays",
       "params": {
         "base_media_path": "$last_output",
-        "output_path": "render/part1_captioned.mp4",
-        "overlay_dir": "render",
+        "output_path": "render/examples/part1_captioned.mp4",
         "overlays": [
           {
-            "overlay_name": "top.png",
-            "text": "**HELLO** [color=#ff3333]WORLD[/color]",
+            "overlay_name": "part1_bottom.png",
+            "text": "**When the build passes**",
             "start_time": 0.0,
-            "end_time": 3.0,
-            "position": ["center", "top"],
-            "width": 1280,
-            "height": 240,
+            "end_time": 4.0,
+            "match_base_size": true,
             "text_align": "center",
-            "text_vertical_align": "center",
-            "text_padding": 24,
-            "font_size": 72,
-            "stroke_width": 4,
-            "stroke_fill": "#000000",
-            "shadow_enabled": true
+            "text_vertical_align": "bottom"
           }
         ]
       }
@@ -163,7 +153,7 @@ Outputs a JSON object to stdout:
 
 ### `apply_multi_text_overlays`
 - Params: `base_media_path`, `overlays`, `output_path`
-- Optional: `overlay_dir`, `output_duration_sec` (used for image bases)
+- Optional: `output_duration_sec` (used for image bases)
 
 Timing behavior (from implementation):
 - `start_time` defaults to `0.0` when omitted.
@@ -176,10 +166,9 @@ Each overlay item can include:
 - `overlay_name` (png filename)
 - `text` (Markdown or HTML)
 - `start_time`, `end_time`
-- `position` (e.g. `["center", "top"]`, `["center", "bottom"]`, `[120, 480]`)
-- `width`, `height`
-- `text_align` (`left`, `center`, `right`)
-- `text_vertical_align` (`top`, `center`, `bottom`)
+- `match_base_size` (bool, **recommended**): PNG is exactly the base media size, placed at (0,0). Use `text_vertical_align` and `text_align` to control where the text appears on screen.
+- `text_align` (`left`, `center`, `right`) — horizontal text placement within the PNG
+- `text_vertical_align` (`top`, `center`, `bottom`) — vertical text placement within the PNG; with `match_base_size` this directly maps to where the text appears on the video
 - `text_padding` (pixels)
 - `font_size`
 - `line_height` (float, default `1.0`; lower values tighten wrapped line distance)
@@ -189,11 +178,11 @@ Each overlay item can include:
 - `stroke_fill`
 - `shadow_enabled`
 - `background_color` (default transparent)
-- `match_base_size` (bool): make PNG exactly base media size and force overlay position `(0,0)`
+- `position`, `width`, `height` — advanced: place a smaller canvas at a specific location on the video. Avoid combining with `match_base_size`.
 
 ### `add_text_side_box`
 - Params: `base_media_path`, `text_data`, `side`, `output_path`
-- Optional: `overlay_dir`, `box_size_px`, `box_size_ratio`, `background_color`, `text_align`, `text_vertical_align`, `text_padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `output_duration_sec`, `panel_png_name`
+- Optional: `box_size_px`, `box_size_ratio`, `background_color`, `text_align`, `text_vertical_align`, `text_padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `output_duration_sec`, `panel_png_name`
 - Optional paragraph params: `paragraph_spacing`, `paragraph_indent_px`
 - Optional sizing control: `auto_size` (bool, default `true`)
 - Optional: `preview_only` (bool)
@@ -202,7 +191,7 @@ Each overlay item can include:
   - Keeps full original video visible (no crop, no scale)
   - If `box_size_px` is not set and `auto_size=true`, panel size auto-grows to fit text content
   - `box_size_ratio` still acts as a minimum baseline size when auto sizing
-  - Saves panel PNG in `overlay_dir`
+  - Saves panel PNG alongside the output file
   - Wraps text to panel width
   - If `preview_only=true`, skips video render and only returns the generated panel PNG path
 
@@ -228,9 +217,8 @@ Each overlay item can include:
   - Keep `stroke_width` >= 3 and `stroke_fill` dark.
   - Ensure overlay `start_time`/`end_time` overlap the base clip duration.
 - Text location looks wrong:
-  - Adjust `position` (overlay placement in video).
-  - Adjust `text_align` and `text_vertical_align` (text placement inside the PNG canvas).
-  - Increase/decrease `width`, `height`, and `text_padding`.
+  - With `match_base_size: true`: set `text_vertical_align` (`top`/`center`/`bottom`) and `text_align` (`left`/`center`/`right`). Do not use `position` — it is ignored when `match_base_size` is set.
+  - Without `match_base_size`: adjust `position` (canvas placement on video) and `text_align`/`text_vertical_align` (text placement within the canvas).
 - Overlay PNG should match source exactly:
   - Use `generate_text_overlay` with `media_path`.
   - Or set `match_base_size: true` for an item in `apply_multi_text_overlays`.
@@ -248,18 +236,24 @@ Each overlay item can include:
 
 ## Quick Examples
 
-- Full-frame overlay PNG from media dimensions: `config/example_overlay_fullframe.json`
-- Side text box composition: `config/example_side_box_right.json`
-- Side text box fast preview (PNG only): `config/example_side_box_preview.json`
+- Timed text overlays: `config/examples/example_overlay.json`
+- Trim + caption pipeline: `config/examples/example_pipeline.json`
+- Side box (right): `config/examples/example_side_box_right.json`
+- Side box (bottom, dense text): `config/examples/example_side_box_bottom.json`
+- Side box fast preview (PNG only): pass `--preview-only` flag or set `"preview_only": true` in config
 - Media metadata query: `uv run .github/scripts/get_media_info.py media/input.mp4`
 
 ## Recommended Defaults
 
-For meme top/bottom captions:
-- `position`: top/bottom center
-- `width`: full video width
-- `height`: ~18-25% of video height
-- `text_align`: center
-- `text_vertical_align`: center
-- `stroke_width`: 4
-- `shadow_enabled`: true
+For caption overlays (`apply_multi_text_overlays`):
+- Use `match_base_size: true` — no need to specify `width`, `height`, or `position`
+- Example default: `text_vertical_align: bottom`
+- `text_align`: `center`
+- `font_size`: 64–72, `stroke_width`: 3–4, `shadow_enabled`: true
+
+For side boxes (`add_text_side_box`):
+- `font_size`: ~23, `stroke_width`: 2
+- `line_height`: 0.7–0.85 (tighter than default for dense text)
+- `text_padding`: 12, `text_align`: `left`
+- `auto_size`: true (default) — panel grows to fit content
+- Set `panel_png_name` explicitly for reproducible asset filenames

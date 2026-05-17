@@ -5,6 +5,6 @@
     "path2": "media/right.png",
     "orientation": "horizontal",
     "duration_sec": 5.0,
-    "output_path": "render/example_stacked.mp4"
+    "output_path": "render/examples/stacked.mp4"
   }
 }
