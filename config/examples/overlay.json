@@ -1,11 +1,11 @@
 {
   "operation": "apply_multi_text_overlays",
   "params": {
-    "base_media_path": "media/base.mp4",
+    "base_media_path": "media/examples/video.mp4",
     "output_path": "render/examples/overlayed.mp4",
     "overlays": [
       {
-        "overlay_name": "headline.png",
+        "overlay_name": "headline",
         "text": "*TOP TEXT* WOW",
         "start_time": 0.0,
         "end_time": 4.5,
@@ -18,7 +18,7 @@
         "stroke_fill": "#000000"
       },
       {
-        "overlay_name": "subline.png",
+        "overlay_name": "subline",
         "text": "<span style=\"color:#00ccff\"><i>bottom text</i></span>",
         "start_time": 3.5,
         "end_time": 7.0,

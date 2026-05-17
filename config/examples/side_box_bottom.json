@@ -1,7 +1,7 @@
 {
   "operation": "add_text_side_box",
   "params": {
-    "base_media_path": "media/base.mp4",
+    "base_media_path": "media/examples/video.mp4",
     "text_data": "This is a very long text that goes below the video making the format really long\nUsing markdown new lines with double spaces helps formatting\nI don't know if I can manually insert also spaces that make it look *like* the new blocks are indented\nWhat I do know is that **bold** and *italic* formatting still looks a little wonky",
     "side": "bottom",
     "output_path": "render/examples/with_bottom_box.mp4",
@@ -17,6 +17,6 @@
     "stroke_width": 2,
     "stroke_fill": "#000000",
     "shadow_enabled": true,
-    "panel_png_name": "example_bottom_panel.png"
+    "panel_png_name": "bottom_panel"
   }
 }

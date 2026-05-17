@@ -1,0 +1,18 @@
+{
+  "operation": "generate_text_overlay",
+  "params": {
+    "text_data": "<b>IMAGE-ONLY MEME</b>\n<span style=\"color:#00ccff\"><i>overlay png matched to source image</i></span>",
+    "media_path": "media/examples/vertical_image.png",
+    "compose_on_media": true,
+    "output_path": "render/examples/image_only_overlay.png",
+    "horizontal_align": "center",
+    "vertical_align": "bottom",
+    "padding": 12,
+    "font_size": 56,
+    "line_height": 0.95,
+    "stroke_width": 3,
+    "stroke_fill": "#000000",
+    "shadow_enabled": true,
+    "background_color": "transparent"
+  }
+}

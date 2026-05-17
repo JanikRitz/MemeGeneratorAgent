@@ -1,8 +1,8 @@
 {
   "operation": "stack_media",
   "params": {
-    "path1": "media/left.mp4",
-    "path2": "media/right.png",
+    "path1": "media/examples/vertical_video.mp4",
+    "path2": "media/examples/vertical_image.png",
     "orientation": "horizontal",
     "duration_sec": 5.0,
     "output_path": "render/examples/stacked.mp4"

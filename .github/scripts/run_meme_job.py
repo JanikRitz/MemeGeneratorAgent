@@ -92,6 +92,7 @@ def execute_step(
             line_height=float(params.get("line_height", 1.0)),
             paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
             paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
+            compose_on_media=bool(params.get("compose_on_media", False)),
         )
 
     if operation == "add_text_side_box":

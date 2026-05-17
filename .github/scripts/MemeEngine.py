@@ -2,6 +2,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from PIL import Image
+
 try:
     from moviepy.editor import (
         CompositeVideoClip,
@@ -183,6 +185,7 @@ class MemeEngine:
         line_height: float = 1.0,
         paragraph_spacing: Optional[int] = None,
         paragraph_indent_px: int = 0,
+        compose_on_media: bool = False,
     ) -> str:
         if media_path:
             media_info = self.get_media_info(media_path)
@@ -217,7 +220,23 @@ class MemeEngine:
             paragraph_indent_px=paragraph_indent_px,
             return_metrics=True,
         )
-        canvas.save(str(out_p), format="PNG")
+        if compose_on_media:
+            if not media_path:
+                raise ValueError("compose_on_media requires media_path")
+
+            base_path = self.resolve_path(media_path)
+            if self._is_video(base_path):
+                raise ValueError("compose_on_media only supports image media_path values")
+
+            with Image.open(str(base_path)).convert("RGBA") as base_img:
+                if base_img.size != (int(video_width), int(video_height)):
+                    base_img = base_img.resize((int(video_width), int(video_height)))
+                composed = base_img.copy()
+                composed.alpha_composite(canvas.convert("RGBA"))
+                composed.save(str(out_p), format="PNG")
+        else:
+            canvas.save(str(out_p), format="PNG")
+
         if metrics.get("overflowed"):
             self.logger.warning(
                 "generate_text_overlay truncated text: output=%s rendered_lines=%s total_lines=%s truncated_lines=%s",
@@ -364,7 +383,7 @@ class MemeEngine:
             return_metrics=True,
         )
 
-        png_name = panel_png_name or f"side_box_{side_value}.png"
+        png_name = (panel_png_name or f"side_box_{side_value}") + ".png"
         panel_png_path = overlay_root / png_name
         panel_canvas.save(str(panel_png_path), format="PNG")
 
@@ -383,6 +402,23 @@ class MemeEngine:
                 panel_png_path,
             )
             return str(panel_png_path)
+
+        image_output_exts = {".png", ".jpg", ".jpeg", ".webp"}
+        if (not media_is_video) and out_p.suffix.lower() in image_output_exts:
+            with Image.open(str(base_path)).convert("RGBA") as base_img:
+                if base_img.size != (base_w, base_h):
+                    base_img = base_img.resize((base_w, base_h))
+
+                final_image = Image.new("RGBA", (final_w, final_h), (0, 0, 0, 0))
+                final_image.paste(base_img, base_position)
+                final_image.paste(panel_canvas.convert("RGBA"), panel_position)
+
+                if out_p.suffix.lower() in {".jpg", ".jpeg"}:
+                    final_image.convert("RGB").save(str(out_p))
+                else:
+                    final_image.save(str(out_p))
+
+            return str(out_p)
 
         base_layer = self._clip_with_position(base_clip, base_position)
         panel_layer = self._clip_with_position(
@@ -405,7 +441,16 @@ class MemeEngine:
             out_p,
             panel_png_path,
         )
-        composite.write_videofile(str(out_p), codec="libx264", audio_codec="aac")
+        write_kwargs: Dict[str, Any] = {}
+        if not media_is_video:
+            write_kwargs["fps"] = 24
+
+        composite.write_videofile(
+            str(out_p),
+            codec="libx264",
+            audio_codec="aac",
+            **write_kwargs,
+        )
         return str(out_p)
 
     def apply_multi_text_overlays(
@@ -470,7 +515,7 @@ class MemeEngine:
                 paragraph_spacing = int(paragraph_spacing)
             paragraph_indent_px = int(item.get("paragraph_indent_px", 0))
 
-            overlay_name = item.get("overlay_name", f"overlay_{index:03d}.png")
+            overlay_name = item.get("overlay_name", f"overlay_{index:03d}") + ".png"
             overlay_path = overlay_root / overlay_name
 
             tokens = self.renderer.parse_tokens(text_data)
