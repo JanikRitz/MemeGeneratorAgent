@@ -28,6 +28,9 @@ Overlay PNG assets are preserved (not deleted) in `render/` by default.
 
 ## Entry Command
 
+Use `uv run` as the default way to execute jobs so the project-managed environment and dependencies are used consistently.
+Avoid calling `python` directly unless you explicitly need a specific interpreter.
+
 Run a job config:
 
 ```powershell
@@ -114,6 +117,8 @@ The command prints the final output path and writes a timestamped run log file.
 
 ### `trim_video`
 - Params: `input_path`, `start_sec`, `end_sec`, `output_path`
+- `trim_video` always cuts the clip to the requested range; there is no implicit "full clip" mode.
+- To keep the full clip, do not use `trim_video` in the pipeline, or set `start_sec: 0.0` and `end_sec` to the source duration from `get_media_info`.
 
 ### `stack_media`
 - Params: `path1`, `path2`, `output_path`
@@ -132,6 +137,13 @@ The command prints the final output path and writes a timestamped run log file.
 ### `apply_multi_text_overlays`
 - Params: `base_media_path`, `overlays`, `output_path`
 - Optional: `overlay_dir`, `output_duration_sec` (used for image bases)
+
+Timing behavior (from implementation):
+- `start_time` defaults to `0.0` when omitted.
+- For video bases, `end_time` defaults to the base clip duration when omitted.
+- For image bases, composition duration is derived from `output_duration_sec` or the largest overlay `end_time`.
+- If you want an overlay to stay for the full video without cutting, set `start_time: 0.0` and omit `end_time`.
+- If you set both times manually, keep `end_time > start_time` and within the base duration for predictable results.
 
 Each overlay item can include:
 - `overlay_name` (png filename)
