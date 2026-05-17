@@ -4,6 +4,6 @@
     "input_path": "media/input.mp4",
     "start_sec": 2.0,
     "end_sec": 8.5,
-    "output_path": "render/trimmed.mp4"
+    "output_path": "render/example_trimmed.mp4"
   }
 }

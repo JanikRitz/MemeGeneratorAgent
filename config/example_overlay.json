@@ -2,7 +2,7 @@
   "operation": "apply_multi_text_overlays",
   "params": {
     "base_media_path": "media/base.mp4",
-    "output_path": "render/overlayed.mp4",
+    "output_path": "render/example_overlayed.mp4",
     "overlay_dir": "render",
     "overlays": [
       {

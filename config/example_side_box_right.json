@@ -4,7 +4,7 @@
     "base_media_path": "media/base.mp4",
     "text_data": "**MEME CONTEXT**  \nThis side panel keeps the full video visible and wraps long lines automatically.",
     "side": "right",
-    "output_path": "render/with_right_box.mp4",
+    "output_path": "render/example_with_right_box.mp4",
     "overlay_dir": "render",
     "box_size_ratio": 0.28,
     "background_color": "#155ca2",

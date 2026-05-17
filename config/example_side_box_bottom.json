@@ -6,7 +6,7 @@
     "side": "bottom",
     "output_path": "render/example_with_bottom_box.mp4",
     "overlay_dir": "render",
-    "box_size_ratio": 0.85,
+    "auto_size": true,
     "background_color": "#155ca2",
     "text_align": "left",
     "text_vertical_align": "top",

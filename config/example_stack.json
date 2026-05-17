@@ -2,9 +2,9 @@
   "operation": "stack_media",
   "params": {
     "path1": "media/left.mp4",
-    "path2": "media/right.jpg",
+    "path2": "media/right.png",
     "orientation": "horizontal",
     "duration_sec": 5.0,
-    "output_path": "render/stacked.mp4"
+    "output_path": "render/example_stacked.mp4"
   }
 }

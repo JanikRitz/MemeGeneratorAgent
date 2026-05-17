@@ -3,7 +3,7 @@
   "params": {
     "media_path": "media/base.mp4",
     "text_data": "**TOP TEXT** [color=#ff3333]WOW[/color]",
-    "output_path": "render/overlay_fullframe.png",
+    "output_path": "render/example_overlay_fullframe.png",
     "horizontal_align": "center",
     "vertical_align": "top",
     "padding": 28,
