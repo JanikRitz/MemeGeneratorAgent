@@ -1,6 +1,0 @@
-{
-  "operation": "get_media_info",
-  "params": {
-    "input_path": "media/base.mp4"
-  }
-}

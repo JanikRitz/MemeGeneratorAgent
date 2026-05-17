@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -10,41 +11,44 @@ class RichTextRenderer:
     def __init__(self, default_font_path=r"C:\\Windows\\Fonts\\impact.ttf", default_size=40):
         self.default_font_path = Path(default_font_path)
         self.default_size = default_size
+        self.logger = logging.getLogger("rich_text_renderer")
+        self._missing_variant_warned: set = set()
 
     def _font_path_for_style(self, bold: bool, italic: bool) -> Path:
-        candidates = []
-        if bold and italic:
-            candidates.extend(
-                [
-                    Path(r"C:\\Windows\\Fonts\\arialbi.ttf"),
-                    self.default_font_path,
-                ]
-            )
-        elif bold:
-            candidates.extend(
-                [
-                    Path(r"C:\\Windows\\Fonts\\arialbd.ttf"),
-                    self.default_font_path,
-                ]
-            )
-        elif italic:
-            candidates.extend(
-                [
-                    Path(r"C:\\Windows\\Fonts\\ariali.ttf"),
-                    self.default_font_path,
-                ]
-            )
-        else:
-            candidates.extend(
-                [
-                    self.default_font_path,
-                    Path(r"C:\\Windows\\Fonts\\arial.ttf"),
-                ]
-            )
+        if not bold and not italic:
+            return self.default_font_path
 
-        for candidate in candidates:
+        # Try to find a variant of the same font family by common filename suffixes.
+        # This keeps Impact as Impact (no variants exist → falls back to Impact itself)
+        # while Arial correctly resolves to arialbd/ariali/arialbi.
+        stem = self.default_font_path.stem.lower()
+        folder = self.default_font_path.parent
+        suffix = self.default_font_path.suffix
+
+        if bold and italic:
+            variant_suffixes = ["bi", "z", "bolditalic"]
+        elif bold:
+            variant_suffixes = ["bd", "b", "bold"]
+        else:
+            variant_suffixes = ["i", "italic"]
+
+        for s in variant_suffixes:
+            candidate = folder / (stem + s + suffix)
             if candidate.exists():
                 return candidate
+
+        style_label = "bold+italic" if bold and italic else ("bold" if bold else "italic")
+        warn_key = (self.default_font_path.name, style_label)
+        if warn_key not in self._missing_variant_warned:
+            self._missing_variant_warned.add(warn_key)
+            self.logger.warning(
+                "No %s variant found for font '%s' -- falling back to default font. "
+                "Bold/italic will not be visually distinct. "
+                "To enable styled variants, use a font that ships with variant files (e.g. arial.ttf).",
+                style_label,
+                self.default_font_path.name,
+            )
+        # No variant found for this font family — stay consistent with the default font.
         return self.default_font_path
 
     def _load_font(self, bold: bool, italic: bool, size: int):
@@ -55,7 +59,10 @@ class RichTextRenderer:
             return ImageFont.load_default()
 
     def _split_words(self, text: str) -> List[str]:
-        return re.findall(r"\S+\s*|\n", text)
+        # [ \t]* on BOTH sides: optional leading whitespace (preserves inter-token boundary
+        # spaces), optional trailing whitespace (consumed so the next word starts clean).
+        # Newlines are captured as standalone tokens and never consumed by \s*.
+        return re.findall(r"[ \t]*\S+[ \t]*|\n", text)
 
     def _to_rgba(self, color: Any, default: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
         if isinstance(color, str):
@@ -252,8 +259,11 @@ class RichTextRenderer:
 
             style = segment["style"]
             font = self._load_font(style["bold"], style["italic"], style["size"])
-            bbox = draw.textbbox((0, 0), segment["text"], font=font)
-            seg_w = bbox[2] - bbox[0]
+            seg_text = segment["text"]
+            bbox = draw.textbbox((0, 0), seg_text, font=font)
+            # Use advance-based length (not ink bbox) so leading/trailing spaces
+            # between styled spans contribute correct horizontal advance.
+            seg_w = int(draw.textlength(seg_text, font=font))
             seg_h = bbox[3] - bbox[1]
 
             current_idx = len(lines) - 1
@@ -265,8 +275,19 @@ class RichTextRenderer:
                 line_heights.append(self.default_size)
                 line_break_after.append("end")
                 current_idx += 1
+                # Strip leading space from a segment that begins a new wrapped line.
+                seg_text = seg_text.lstrip(" \t")
+                seg_w = int(draw.textlength(seg_text, font=font)) if seg_text else 0
 
-            lines[current_idx].append({"text": segment["text"], "style": style, "font": font, "w": seg_w, "h": seg_h})
+            # Also strip leading space when this segment is the very first on any line.
+            if line_widths[current_idx] == 0 and seg_text and seg_text[0] in (" ", "\t"):
+                seg_text = seg_text.lstrip(" \t")
+                seg_w = int(draw.textlength(seg_text, font=font)) if seg_text else 0
+
+            if not seg_text:
+                continue
+
+            lines[current_idx].append({"text": seg_text, "style": style, "font": font, "w": seg_w, "h": seg_h})
             line_widths[current_idx] += seg_w
             line_heights[current_idx] = max(line_heights[current_idx], seg_h)
 

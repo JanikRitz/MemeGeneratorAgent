@@ -12,7 +12,7 @@ Use this skill when you want to:
 - Apply multiple timed text overlays to a base video/image.
 - Generate full-frame overlay PNGs that can be applied directly without scaling.
 - Add a top/bottom/left/right text side-box while keeping the full original video visible.
-- Query media width/height/duration so the agent can auto-build correct configs.
+- Query media width/height/duration with `get_media_info.py` so the agent can auto-build correct configs.
 
 Outputs are written to `render/` and logs to `logs/`.
 Overlay PNG assets are preserved (not deleted) in `render/` by default.
@@ -26,12 +26,12 @@ Overlay PNG assets are preserved (not deleted) in `render/` by default.
   - relative to project root, or
   - absolute Windows paths.
 
-## Entry Command
+## Entry Commands
 
 Use `uv run` as the default way to execute jobs so the project-managed environment and dependencies are used consistently.
 Avoid calling `python` directly unless you explicitly need a specific interpreter.
 
-Run a job config:
+### Run a job config
 
 ```powershell
 uv run .github/scripts/run_meme_job.py --config config/example_overlay.json
@@ -50,6 +50,33 @@ uv run .github/scripts/run_meme_job.py config/example_overlay.json
 ```
 
 The command prints the final output path and writes a timestamped run log file.
+
+### Query media info
+
+Use the dedicated `get_media_info.py` script to inspect a media file's width, height, duration, and type.
+This is the preferred way to look up dimensions before building configs — it does not require a job JSON file.
+
+```powershell
+uv run .github/scripts/get_media_info.py media/input.mp4
+```
+
+Positional or flag form:
+
+```powershell
+uv run .github/scripts/get_media_info.py --input media/input.mp4
+```
+
+Outputs a JSON object to stdout:
+
+```json
+{
+  "path": "C:/ProgrammingProjects/MemeGenerator/media/input.mp4",
+  "is_video": true,
+  "width": 1280,
+  "height": 720,
+  "duration_sec": 12.5
+}
+```
 
 ## JSON Job Formats
 
@@ -173,16 +200,14 @@ Each overlay item can include:
   - Wraps text to panel width
   - If `preview_only=true`, skips video render and only returns the generated panel PNG path
 
-### `get_media_info`
-- Params: `input_path`
-- Returns JSON string with `width`, `height`, `duration_sec`, and `is_video`
-
 ## Text Syntax
 
 ### Markdown-like
 - Bold: `**word**`
 - Italic: `*word*`
 - Color: `[color=#ff3333]word[/color]`
+- Hard line break: `\n` (JSON escape) or a literal newline in the string
+  - Leading spaces after `\n` are ignored (no indent support)
 
 ### HTML-like
 - Bold: `<b>word</b>` or `<strong>word</strong>`
@@ -208,13 +233,18 @@ Each overlay item can include:
 - Text gets cut off:
   - The renderer logs a warning with rendered and truncated line counts.
   - Increase panel size (`box_size_px`/`box_size_ratio`) or reduce `font_size`/padding.
+- Bold/italic look identical to regular text or appear mismatched:
+  - The renderer looks for variant files in the same font family (e.g. `arialbd.ttf` for bold when using `arial.ttf`).
+  - Fonts like **Impact** (`impact.ttf`) have no bold/italic variant files, so styled tokens render in the same Impact font — no visual difference, but rendering stays consistent.
+  - To get working bold/italic, set the default font to one that ships all variants. Arial works: `C:\Windows\Fonts\arial.ttf`.
+  - Alternatively, use `[color=...]` for emphasis instead of bold/italic when the Impact font is preferred.
 
 ## Quick Examples
 
 - Full-frame overlay PNG from media dimensions: `config/example_overlay_fullframe.json`
 - Side text box composition: `config/example_side_box_right.json`
 - Side text box fast preview (PNG only): `config/example_side_box_preview.json`
-- Media metadata query: `config/example_media_info.json`
+- Media metadata query: `uv run .github/scripts/get_media_info.py media/input.mp4`
 
 ## Recommended Defaults
 

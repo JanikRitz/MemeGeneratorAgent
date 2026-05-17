@@ -13,7 +13,7 @@ def setup_logging(logs_dir: Path) -> logging.Logger:
     log_file = logs_dir / f"meme_job_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
     logger = logging.getLogger("meme_engine")
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.WARNING)
     logger.handlers.clear()
 
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
@@ -118,9 +118,6 @@ def execute_step(
             preview_only=preview_only,
             line_height=float(params.get("line_height", 1.0)),
         )
-
-    if operation == "get_media_info":
-        return json.dumps(engine.get_media_info(input_path=params["input_path"]))
 
     if operation == "apply_multi_text_overlays":
         return engine.apply_multi_text_overlays(
