@@ -90,6 +90,8 @@ def execute_step(
             font_size=int(params["font_size"]) if params.get("font_size") is not None else None,
             background_color=params.get("background_color", "transparent"),
             line_height=float(params.get("line_height", 1.0)),
+            paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
+            paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
         )
 
     if operation == "add_text_side_box":
@@ -117,6 +119,8 @@ def execute_step(
             panel_png_name=params.get("panel_png_name"),
             preview_only=preview_only,
             line_height=float(params.get("line_height", 1.0)),
+            paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
+            paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
         )
 
     if operation == "apply_multi_text_overlays":

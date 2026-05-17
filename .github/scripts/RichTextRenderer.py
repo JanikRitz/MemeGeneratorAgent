@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 class RichTextRenderer:
-    def __init__(self, default_font_path=r"C:\\Windows\\Fonts\\impact.ttf", default_size=40):
+    def __init__(self, default_font_path=r"C:\\Windows\\Fonts\\COMIC.ttf", default_size=40):
         self.default_font_path = Path(default_font_path)
         self.default_size = default_size
         self.logger = logging.getLogger("rich_text_renderer")
@@ -194,6 +194,7 @@ class RichTextRenderer:
         padding: int = 24,
         line_spacing: int = None,
         paragraph_spacing: int = None,
+        paragraph_indent_px: int = 0,
         line_height: float = 1.0,
         stroke_width: int = 3,
         stroke_fill: str = "#000000",
@@ -219,7 +220,7 @@ class RichTextRenderer:
         if line_spacing is None:
             line_spacing = max(2, int(round(avg_font_size * 0.16)))
         if paragraph_spacing is None:
-            paragraph_spacing = max(line_spacing + 2, int(round(avg_font_size * 0.34)))
+            paragraph_spacing = max(line_spacing * 2, int(round(avg_font_size * 0.5)))
 
         segments = []
         for token in structured_text:
@@ -244,6 +245,7 @@ class RichTextRenderer:
         line_widths: List[int] = [0]
         line_heights: List[int] = [self.default_size]
         line_break_after: List[str] = ["end"]
+        line_start_reason: List[str] = ["start"]
         explicit_break_count = 0
         wrap_break_count = 0
 
@@ -255,6 +257,7 @@ class RichTextRenderer:
                 line_widths.append(0)
                 line_heights.append(self.default_size)
                 line_break_after.append("end")
+                line_start_reason.append("explicit")
                 continue
 
             style = segment["style"]
@@ -274,13 +277,20 @@ class RichTextRenderer:
                 line_widths.append(0)
                 line_heights.append(self.default_size)
                 line_break_after.append("end")
+                line_start_reason.append("wrap")
                 current_idx += 1
                 # Strip leading space from a segment that begins a new wrapped line.
                 seg_text = seg_text.lstrip(" \t")
                 seg_w = int(draw.textlength(seg_text, font=font)) if seg_text else 0
 
-            # Also strip leading space when this segment is the very first on any line.
-            if line_widths[current_idx] == 0 and seg_text and seg_text[0] in (" ", "\t"):
+            # Strip leading space on regular/wrapped line starts, but preserve
+            # user-entered indentation after explicit newlines.
+            if (
+                line_widths[current_idx] == 0
+                and seg_text
+                and seg_text[0] in (" ", "\t")
+                and line_start_reason[current_idx] != "explicit"
+            ):
                 seg_text = seg_text.lstrip(" \t")
                 seg_w = int(draw.textlength(seg_text, font=font)) if seg_text else 0
 
@@ -311,13 +321,14 @@ class RichTextRenderer:
         for idx, line in enumerate(lines):
             line_w = line_widths[idx]
             line_h = line_heights[idx]
+            explicit_line_indent = int(paragraph_indent_px) if line_start_reason[idx] == "explicit" else 0
 
             if horizontal_align == "right":
-                x = max(padding, container_width - padding - line_w)
+                x = max(padding, container_width - padding - line_w - explicit_line_indent)
             elif horizontal_align == "left":
-                x = padding
+                x = padding + explicit_line_indent
             else:
-                x = max(padding, int((container_width - line_w) / 2))
+                x = max(padding, int((container_width - line_w) / 2) + explicit_line_indent)
 
             for chunk in line:
                 text = chunk["text"]
@@ -365,6 +376,7 @@ class RichTextRenderer:
             "truncated_lines": max(0, len(lines) - rendered_lines),
             "line_spacing": int(line_spacing),
             "paragraph_spacing": int(paragraph_spacing),
+            "paragraph_indent_px": int(paragraph_indent_px),
             "line_height": float(line_height),
             "wrap_break_count": int(wrap_break_count),
             "explicit_break_count": int(explicit_break_count),

@@ -181,6 +181,8 @@ class MemeEngine:
         font_size: Optional[int] = None,
         background_color: Any = "transparent",
         line_height: float = 1.0,
+        paragraph_spacing: Optional[int] = None,
+        paragraph_indent_px: int = 0,
     ) -> str:
         if media_path:
             media_info = self.get_media_info(media_path)
@@ -211,6 +213,8 @@ class MemeEngine:
             shadow_enabled=shadow_enabled,
             background_fill=background_color,
             line_height=line_height,
+            paragraph_spacing=paragraph_spacing,
+            paragraph_indent_px=paragraph_indent_px,
             return_metrics=True,
         )
         canvas.save(str(out_p), format="PNG")
@@ -245,6 +249,8 @@ class MemeEngine:
         panel_png_name: Optional[str] = None,
         preview_only: bool = False,
         line_height: float = 1.0,
+        paragraph_spacing: Optional[int] = None,
+        paragraph_indent_px: int = 0,
     ) -> str:
         base_path = self.resolve_path(base_media_path)
         out_p = self.resolve_output_path(output_path)
@@ -296,6 +302,8 @@ class MemeEngine:
             shadow_enabled=bool(shadow_enabled),
             background_fill=background_color,
             line_height=line_height,
+            paragraph_spacing=paragraph_spacing,
+            paragraph_indent_px=paragraph_indent_px,
             return_metrics=True,
         )
 
@@ -399,6 +407,10 @@ class MemeEngine:
             font_size = int(item.get("font_size", self.renderer.default_size))
             background_color = item.get("background_color", "transparent")
             line_height = float(item.get("line_height", 1.0))
+            paragraph_spacing = item.get("paragraph_spacing")
+            if paragraph_spacing is not None:
+                paragraph_spacing = int(paragraph_spacing)
+            paragraph_indent_px = int(item.get("paragraph_indent_px", 0))
 
             overlay_name = item.get("overlay_name", f"overlay_{index:03d}.png")
             overlay_path = overlay_root / overlay_name
@@ -419,6 +431,8 @@ class MemeEngine:
                 shadow_enabled=shadow_enabled,
                 background_fill=background_color,
                 line_height=line_height,
+                paragraph_spacing=paragraph_spacing,
+                paragraph_indent_px=paragraph_indent_px,
                 return_metrics=True,
             )
             canvas.save(str(overlay_path), format="PNG")

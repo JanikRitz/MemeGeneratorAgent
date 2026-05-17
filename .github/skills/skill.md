@@ -145,7 +145,7 @@ Outputs a JSON object to stdout:
 ### `trim_video`
 - Params: `input_path`, `start_sec`, `end_sec`, `output_path`
 - `trim_video` always cuts the clip to the requested range; there is no implicit "full clip" mode.
-- To keep the full clip, do not use `trim_video` in the pipeline, or set `start_sec: 0.0` and `end_sec` to the source duration from `get_media_info`.
+- To keep the full clip, do not use `trim_video` in the pipeline, or set `start_sec: 0.0` and `end_sec` to the source duration from `get_media_info.py`.
 
 ### `stack_media`
 - Params: `path1`, `path2`, `output_path`
@@ -159,7 +159,7 @@ Outputs a JSON object to stdout:
 - Optional sizing params:
   - `media_path` (recommended): auto-uses media width/height so PNG matches source exactly
   - `video_width`, `video_height` (manual fallback)
-- Optional style params: `horizontal_align`, `vertical_align`, `padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `background_color`
+- Optional style params: `horizontal_align`, `vertical_align`, `padding`, `font_size`, `line_height`, `paragraph_spacing`, `paragraph_indent_px`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `background_color`
 
 ### `apply_multi_text_overlays`
 - Params: `base_media_path`, `overlays`, `output_path`
@@ -183,6 +183,8 @@ Each overlay item can include:
 - `text_padding` (pixels)
 - `font_size`
 - `line_height` (float, default `1.0`; lower values tighten wrapped line distance)
+- `paragraph_spacing` (int pixels; extra vertical gap after manual `\n` line breaks)
+- `paragraph_indent_px` (int pixels; horizontal indent for lines that start after manual `\n`)
 - `stroke_width`
 - `stroke_fill`
 - `shadow_enabled`
@@ -192,6 +194,7 @@ Each overlay item can include:
 ### `add_text_side_box`
 - Params: `base_media_path`, `text_data`, `side`, `output_path`
 - Optional: `overlay_dir`, `box_size_px`, `box_size_ratio`, `background_color`, `text_align`, `text_vertical_align`, `text_padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `output_duration_sec`, `panel_png_name`
+- Optional paragraph params: `paragraph_spacing`, `paragraph_indent_px`
 - Optional: `preview_only` (bool)
 - Behavior:
   - Expands output canvas at the chosen side (`top`, `bottom`, `left`, `right`)
@@ -207,7 +210,8 @@ Each overlay item can include:
 - Italic: `*word*`
 - Color: `[color=#ff3333]word[/color]`
 - Hard line break: `\n` (JSON escape) or a literal newline in the string
-  - Leading spaces after `\n` are ignored (no indent support)
+  - Manual `\n` creates paragraph-style spacing (larger than auto-wrap spacing)
+  - Leading spaces after `\n` are preserved, so manual indentation works
 
 ### HTML-like
 - Bold: `<b>word</b>` or `<strong>word</strong>`
