@@ -134,12 +134,16 @@ Outputs a JSON object to stdout:
 
 ### `trim_video`
 - Params: `input_path`, `start_sec`, `end_sec`, `output_path`
+- Optional quality params: `video_crf`, `video_preset`, `video_bitrate`, `audio_bitrate`
 - `trim_video` always cuts the clip to the requested range; there is no implicit "full clip" mode.
 - To keep the full clip, do not use `trim_video` in the pipeline, or set `start_sec: 0.0` and `end_sec` to the source duration from `get_media_info.py`.
 
 ### `scale_media`
 - Params: `input_path`, `output_path`
 - Optional: `max_long_side`, `max_short_side`, `upscale` (default `false`)
+- Optional quality params:
+  - Video outputs: `video_crf`, `video_preset`, `video_bitrate`, `audio_bitrate`
+  - Image outputs: `image_quality`, `png_compress_level`, `optimize`
 - Preserves aspect ratio for both image and video inputs.
 - At least one limit is required:
   - `max_long_side`: caps the larger dimension (great for one-number targets like `1920` for 1080x1920 / 1920x1080)
@@ -149,9 +153,11 @@ Outputs a JSON object to stdout:
 ### `stack_media`
 - Params: `path1`, `path2`, `output_path`
 - Optional: `orientation` (`horizontal` or `vertical`), `duration_sec` (for still images)
+- Optional quality params: `video_crf`, `video_preset`, `video_bitrate`, `audio_bitrate`
 
 ### `concatenate_clips`
 - Params: `clip_paths` (array), `output_path`
+- Optional quality params: `video_crf`, `video_preset`, `video_bitrate`, `audio_bitrate`
 
 ### `generate_text_overlay`
 - Params: `text_data`, `video_width`, `video_height`, `output_path`
@@ -159,10 +165,12 @@ Outputs a JSON object to stdout:
   - `media_path` (recommended): auto-uses media width/height so PNG matches source exactly
   - `video_width`, `video_height` (manual fallback)
 - Optional style params: `horizontal_align`, `vertical_align`, `padding`, `font_size`, `line_height`, `paragraph_spacing`, `paragraph_indent_px`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `background_color`
+- Optional image quality params: `image_quality`, `png_compress_level`, `optimize`
 
 ### `apply_multi_text_overlays`
 - Params: `base_media_path`, `overlays`, `output_path`
 - Optional: `output_duration_sec` (used for image bases)
+- Optional quality params: `video_crf`, `video_preset`, `video_bitrate`, `audio_bitrate`
 
 Timing behavior (from implementation):
 - `start_time` defaults to `0.0` when omitted.
@@ -194,6 +202,9 @@ Each overlay item can include:
 - Optional: `box_size_px`, `box_size_ratio`, `background_color`, `text_align`, `text_vertical_align`, `text_padding`, `font_size`, `line_height`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `output_duration_sec`, `panel_png_name`
 - Optional paragraph params: `paragraph_spacing`, `paragraph_indent_px`
 - Optional sizing control: `auto_size` (bool, default `true`)
+- Optional quality params:
+  - Video outputs: `video_crf`, `video_preset`, `video_bitrate`, `audio_bitrate`
+  - Image outputs: `image_quality`, `png_compress_level`, `optimize`
 - Optional: `preview_only` (bool)
 - Behavior:
   - Expands output canvas at the chosen side (`top`, `bottom`, `left`, `right`)
@@ -248,8 +259,16 @@ Each overlay item can include:
 - Timed text overlays: `config/examples/example_overlay.json`
 - Trim + caption pipeline: `config/examples/example_pipeline.json`
 - Scale then top side-box (image): `config/examples/scale_then_top_box_image.json`
+- Top side-box with hard JPEG compression: `config/examples/side_box_top_image_crunchy.json`
+- Top side-box super crunchy JPEG: `config/examples/side_box_top_image_super_crunchy.json`
+- Top side-box balanced JPEG: `config/examples/side_box_top_image_balanced.json`
+- Top side-box relatively good JPEG: `config/examples/side_box_top_image_good.json`
 - Side box (right): `config/examples/example_side_box_right.json`
 - Side box (bottom, dense text): `config/examples/example_side_box_bottom.json`
+- Video trim + scale + overlay with heavier compression: `config/examples/video_trim_scale_overlay.json`
+- Video trim + scale + overlay super crunchy: `config/examples/video_trim_scale_overlay_super_crunchy.json`
+- Video trim + scale + overlay balanced: `config/examples/video_trim_scale_overlay_balanced.json`
+- Video trim + scale + overlay relatively good: `config/examples/video_trim_scale_overlay_good.json`
 - Side box fast preview (PNG only): pass `--preview-only` flag or set `"preview_only": true` in config
 - Media metadata query: `uv run .github/scripts/get_media_info.py media/input.mp4`
 
@@ -267,3 +286,23 @@ For side boxes (`add_text_side_box`):
 - `text_padding`: 12, `text_align`: `left`
 - `auto_size`: true (default) — panel grows to fit content
 - Set `panel_png_name` explicitly for reproducible asset filenames
+
+For a "thrown-around-the-internet" compression feel:
+- Video: `video_crf: 34-40`, `video_preset: "veryfast"`, and low `video_bitrate` like `500k-900k`
+- Image (JPEG/WebP): `image_quality: 18-35`, `optimize: true`
+
+## Quality Ladder Examples
+
+Use these presets as practical anchors, then nudge values to taste.
+
+Video (`.mp4`):
+- Super crunchy: `video_crf: 40-41`, `video_preset: "veryfast"`, `video_bitrate: 320k-450k`, `audio_bitrate: 40k-48k`
+- Crunchy: `video_crf: 34-36`, `video_preset: "fast"`/`"veryfast"`, `video_bitrate: 700k-1000k`, `audio_bitrate: 64k`
+- Balanced: `video_crf: 28-32`, `video_preset: "fast"`, `video_bitrate: 1000k-1600k`, `audio_bitrate: 96k`
+- Relatively good: `video_crf: 19-22`, `video_preset: "slow"`, `video_bitrate: 2500k-3500k`, `audio_bitrate: 128k-160k`
+
+Image (`.jpg`/`.webp`):
+- Super crunchy: `image_quality: 10-20`, `optimize: true`
+- Crunchy: `image_quality: 20-35`, `optimize: true`
+- Balanced: `image_quality: 35-55`, `optimize: true`
+- Relatively good: `image_quality: 75-90`, `optimize: true`

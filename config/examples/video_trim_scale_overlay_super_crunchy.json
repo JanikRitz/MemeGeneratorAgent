@@ -1,0 +1,71 @@
+{
+  "pipeline": [
+    {
+      "operation": "trim_video",
+      "params": {
+        "input_path": "media/examples/video.mp4",
+        "start_sec": 1.0,
+        "end_sec": 6.0,
+        "output_path": "render/examples/video_trimmed_super_crunchy.mp4",
+        "video_crf": 38,
+        "video_preset": "veryfast",
+        "video_bitrate": "450k",
+        "audio_bitrate": "48k"
+      }
+    },
+    {
+      "operation": "scale_media",
+      "params": {
+        "input_path": "$last_output",
+        "output_path": "render/examples/video_trimmed_480_super_crunchy.mp4",
+        "max_long_side": 480,
+        "upscale": false,
+        "video_crf": 40,
+        "video_preset": "veryfast",
+        "video_bitrate": "380k",
+        "audio_bitrate": "40k"
+      }
+    },
+    {
+      "operation": "apply_multi_text_overlays",
+      "params": {
+        "base_media_path": "$last_output",
+        "output_path": "render/examples/video_trim_scale_overlay_super_crunchy.mp4",
+        "video_crf": 41,
+        "video_preset": "veryfast",
+        "video_bitrate": "320k",
+        "audio_bitrate": "40k",
+        "overlays": [
+          {
+            "overlay_name": "trim_scale_top_super_crunchy",
+            "text": "**SUPER CRUNCHY**",
+            "start_time": 0.0,
+            "end_time": 5.0,
+            "match_base_size": true,
+            "text_align": "center",
+            "text_vertical_align": "top",
+            "text_padding": 8,
+            "font_size": 20,
+            "stroke_width": 2,
+            "stroke_fill": "#000000",
+            "shadow_enabled": true
+          },
+          {
+            "overlay_name": "trim_scale_bottom_super_crunchy",
+            "text": "<span style=\"color:#00ccff\"><i>reposted too many times</i></span>",
+            "start_time": 2.0,
+            "end_time": 5.0,
+            "match_base_size": true,
+            "text_align": "center",
+            "text_vertical_align": "bottom",
+            "text_padding": 8,
+            "font_size": 20,
+            "stroke_width": 2,
+            "stroke_fill": "#000000",
+            "shadow_enabled": true
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -106,6 +106,91 @@ class MemeEngine:
             return position, "center"
         return "center", "center"
 
+    def _build_ffmpeg_params(
+        self,
+        video_crf: Optional[int],
+        video_preset: Optional[str],
+    ) -> Optional[List[str]]:
+        ffmpeg_params: List[str] = []
+
+        if video_crf is not None:
+            if video_crf < 0 or video_crf > 51:
+                raise ValueError("video_crf must be between 0 and 51")
+            ffmpeg_params.extend(["-crf", str(int(video_crf))])
+
+        if video_preset is not None:
+            ffmpeg_params.extend(["-preset", str(video_preset)])
+
+        return ffmpeg_params or None
+
+    def _write_video(
+        self,
+        clip,
+        output_path: Path,
+        fps: Optional[float] = None,
+        video_codec: str = "libx264",
+        audio_codec: str = "aac",
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+    ) -> None:
+        write_kwargs: Dict[str, Any] = {
+            "codec": video_codec,
+            "audio_codec": audio_codec,
+        }
+        if fps is not None:
+            write_kwargs["fps"] = fps
+        if video_bitrate:
+            write_kwargs["bitrate"] = str(video_bitrate)
+        if audio_bitrate:
+            write_kwargs["audio_bitrate"] = str(audio_bitrate)
+
+        ffmpeg_params = self._build_ffmpeg_params(video_crf=video_crf, video_preset=video_preset)
+        if ffmpeg_params:
+            write_kwargs["ffmpeg_params"] = ffmpeg_params
+
+        clip.write_videofile(str(output_path), **write_kwargs)
+
+    def _save_image(
+        self,
+        image: Image.Image,
+        output_path: Path,
+        image_quality: Optional[int] = None,
+        png_compress_level: Optional[int] = None,
+        optimize: Optional[bool] = None,
+    ) -> None:
+        suffix = output_path.suffix.lower()
+        save_kwargs: Dict[str, Any] = {}
+
+        if optimize is not None:
+            save_kwargs["optimize"] = bool(optimize)
+
+        if image_quality is not None:
+            if image_quality < 1 or image_quality > 100:
+                raise ValueError("image_quality must be between 1 and 100")
+
+        if png_compress_level is not None:
+            if png_compress_level < 0 or png_compress_level > 9:
+                raise ValueError("png_compress_level must be between 0 and 9")
+
+        if suffix in {".jpg", ".jpeg"}:
+            if image_quality is not None:
+                save_kwargs["quality"] = int(image_quality)
+            image.convert("RGB").save(str(output_path), **save_kwargs)
+            return
+
+        if suffix == ".webp":
+            if image_quality is not None:
+                save_kwargs["quality"] = int(image_quality)
+            image.save(str(output_path), **save_kwargs)
+            return
+
+        if suffix == ".png" and png_compress_level is not None:
+            save_kwargs["compress_level"] = int(png_compress_level)
+
+        image.save(str(output_path), **save_kwargs)
+
     def _compute_scale_factor(
         self,
         width: int,
@@ -143,6 +228,13 @@ class MemeEngine:
         max_long_side: Optional[int] = None,
         max_short_side: Optional[int] = None,
         upscale: bool = False,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+        image_quality: Optional[int] = None,
+        png_compress_level: Optional[int] = None,
+        optimize: Optional[bool] = None,
     ) -> str:
         in_p = self.resolve_path(input_path)
         out_p = self.resolve_output_path(output_path)
@@ -175,11 +267,14 @@ class MemeEngine:
                     scaled = clip.resized(new_size=(target_w, target_h))
 
                 fps = float(getattr(clip, "fps", 24) or 24)
-                scaled.write_videofile(
-                    str(out_p),
-                    codec="libx264",
-                    audio_codec="aac",
+                self._write_video(
+                    scaled,
+                    out_p,
                     fps=fps,
+                    video_crf=video_crf,
+                    video_preset=video_preset,
+                    video_bitrate=video_bitrate,
+                    audio_bitrate=audio_bitrate,
                 )
 
                 self.logger.info(
@@ -209,10 +304,13 @@ class MemeEngine:
                 else:
                     scaled_img = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
-                if out_p.suffix.lower() in {".jpg", ".jpeg"}:
-                    scaled_img.convert("RGB").save(str(out_p))
-                else:
-                    scaled_img.save(str(out_p))
+                self._save_image(
+                    scaled_img,
+                    out_p,
+                    image_quality=image_quality,
+                    png_compress_level=png_compress_level,
+                    optimize=optimize,
+                )
 
                 self.logger.info(
                     "scale_media image input=%s source=%sx%s target=%sx%s output=%s",
@@ -226,14 +324,33 @@ class MemeEngine:
 
         return str(out_p)
 
-    def trim_video(self, input_path: str, start_sec: float, end_sec: float, output_path: str) -> str:
+    def trim_video(
+        self,
+        input_path: str,
+        start_sec: float,
+        end_sec: float,
+        output_path: str,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+    ) -> str:
         in_p = self.resolve_path(input_path)
         out_p = self.resolve_output_path(output_path)
         self.logger.info("trim_video input=%s start=%s end=%s output=%s", in_p, start_sec, end_sec, out_p)
         
         with VideoFileClip(str(in_p)) as clip:
             trimmed = clip.subclipped(start_sec, end_sec)
-            trimmed.write_videofile(str(out_p), codec="libx264", audio_codec="aac")
+            fps = float(getattr(clip, "fps", 24) or 24)
+            self._write_video(
+                trimmed,
+                out_p,
+                fps=fps,
+                video_crf=video_crf,
+                video_preset=video_preset,
+                video_bitrate=video_bitrate,
+                audio_bitrate=audio_bitrate,
+            )
         return str(out_p)
 
     def stack_media(
@@ -243,6 +360,10 @@ class MemeEngine:
         output_path: str,
         orientation: str = "horizontal",
         duration_sec: float = 3.0,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
     ) -> str:
         p1 = self.resolve_path(path1)
         p2 = self.resolve_path(path2)
@@ -275,16 +396,42 @@ class MemeEngine:
             grid = [[clip1], [clip2]]
 
         final_clip = clips_array(grid)
-        final_clip.write_videofile(str(out_p), codec="libx264", audio_codec="aac")
+        fps = float(getattr(clip1, "fps", getattr(clip2, "fps", 24)) or 24)
+        self._write_video(
+            final_clip,
+            out_p,
+            fps=fps,
+            video_crf=video_crf,
+            video_preset=video_preset,
+            video_bitrate=video_bitrate,
+            audio_bitrate=audio_bitrate,
+        )
         return str(out_p)
 
-    def concatenate_clips(self, clip_paths: List[str], output_path: str) -> str:
+    def concatenate_clips(
+        self,
+        clip_paths: List[str],
+        output_path: str,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+    ) -> str:
         resolved = [self.resolve_path(path) for path in clip_paths]
         self.logger.info("concatenate_clips clip_count=%s output=%s", len(resolved), output_path)
         clips = [VideoFileClip(str(path)) for path in resolved]
         final_clip = concatenate_videoclips(clips, method="compose")
         out_p = self.resolve_output_path(output_path)
-        final_clip.write_videofile(str(out_p), codec="libx264", audio_codec="aac")
+        fps = float(getattr(clips[0], "fps", 24) or 24)
+        self._write_video(
+            final_clip,
+            out_p,
+            fps=fps,
+            video_crf=video_crf,
+            video_preset=video_preset,
+            video_bitrate=video_bitrate,
+            audio_bitrate=audio_bitrate,
+        )
         return str(out_p)
 
     def generate_text_overlay(
@@ -306,6 +453,9 @@ class MemeEngine:
         paragraph_spacing: Optional[int] = None,
         paragraph_indent_px: int = 0,
         compose_on_media: bool = False,
+        image_quality: Optional[int] = None,
+        png_compress_level: Optional[int] = None,
+        optimize: Optional[bool] = None,
     ) -> str:
         if media_path:
             media_info = self.get_media_info(media_path)
@@ -353,9 +503,21 @@ class MemeEngine:
                     base_img = base_img.resize((int(video_width), int(video_height)))
                 composed = base_img.copy()
                 composed.alpha_composite(canvas.convert("RGBA"))
-                composed.save(str(out_p), format="PNG")
+                self._save_image(
+                    composed,
+                    out_p,
+                    image_quality=image_quality,
+                    png_compress_level=png_compress_level,
+                    optimize=optimize,
+                )
         else:
-            canvas.save(str(out_p), format="PNG")
+            self._save_image(
+                canvas,
+                out_p,
+                image_quality=image_quality,
+                png_compress_level=png_compress_level,
+                optimize=optimize,
+            )
 
         if metrics.get("overflowed"):
             self.logger.warning(
@@ -391,6 +553,13 @@ class MemeEngine:
         paragraph_spacing: Optional[int] = None,
         paragraph_indent_px: int = 0,
         auto_size: bool = True,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+        image_quality: Optional[int] = None,
+        png_compress_level: Optional[int] = None,
+        optimize: Optional[bool] = None,
     ) -> str:
         base_path = self.resolve_path(base_media_path)
         out_p = self.resolve_output_path(output_path)
@@ -532,11 +701,13 @@ class MemeEngine:
                 final_image = Image.new("RGBA", (final_w, final_h), (0, 0, 0, 0))
                 final_image.paste(base_img, base_position)
                 final_image.paste(panel_canvas.convert("RGBA"), panel_position)
-
-                if out_p.suffix.lower() in {".jpg", ".jpeg"}:
-                    final_image.convert("RGB").save(str(out_p))
-                else:
-                    final_image.save(str(out_p))
+                self._save_image(
+                    final_image,
+                    out_p,
+                    image_quality=image_quality,
+                    png_compress_level=png_compress_level,
+                    optimize=optimize,
+                )
 
             return str(out_p)
 
@@ -561,15 +732,15 @@ class MemeEngine:
             out_p,
             panel_png_path,
         )
-        write_kwargs: Dict[str, Any] = {}
-        if not media_is_video:
-            write_kwargs["fps"] = 24
-
-        composite.write_videofile(
-            str(out_p),
-            codec="libx264",
-            audio_codec="aac",
-            **write_kwargs,
+        fps = 24.0 if not media_is_video else float(getattr(base_clip, "fps", 24) or 24)
+        self._write_video(
+            composite,
+            out_p,
+            fps=fps,
+            video_crf=video_crf,
+            video_preset=video_preset,
+            video_bitrate=video_bitrate,
+            audio_bitrate=audio_bitrate,
         )
         return str(out_p)
 
@@ -580,6 +751,10 @@ class MemeEngine:
         output_path: str,
         overlay_dir: str = "render",
         output_duration_sec: Optional[float] = None,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
     ) -> str:
         base_path = self.resolve_path(base_media_path)
         out_p = self.resolve_output_path(output_path)
@@ -690,5 +865,14 @@ class MemeEngine:
             )
 
         composed = CompositeVideoClip(layered_clips)
-        composed.write_videofile(str(out_p), codec="libx264", audio_codec="aac")
+        fps = 24.0 if not media_is_video else float(getattr(base_clip, "fps", 24) or 24)
+        self._write_video(
+            composed,
+            out_p,
+            fps=fps,
+            video_crf=video_crf,
+            video_preset=video_preset,
+            video_bitrate=video_bitrate,
+            audio_bitrate=audio_bitrate,
+        )
         return str(out_p)

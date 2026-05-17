@@ -51,12 +51,25 @@ def execute_step(
     if last_output:
         params = _replace_last_output(params, last_output)
 
+    video_quality_kwargs = {
+        "video_crf": int(params["video_crf"]) if params.get("video_crf") is not None else None,
+        "video_preset": params.get("video_preset"),
+        "video_bitrate": params.get("video_bitrate"),
+        "audio_bitrate": params.get("audio_bitrate"),
+    }
+    image_quality_kwargs = {
+        "image_quality": int(params["image_quality"]) if params.get("image_quality") is not None else None,
+        "png_compress_level": int(params["png_compress_level"]) if params.get("png_compress_level") is not None else None,
+        "optimize": bool(params["optimize"]) if params.get("optimize") is not None else None,
+    }
+
     if operation == "trim_video":
         return engine.trim_video(
             input_path=params["input_path"],
             start_sec=float(params["start_sec"]),
             end_sec=float(params["end_sec"]),
             output_path=params["output_path"],
+            **video_quality_kwargs,
         )
 
     if operation == "scale_media":
@@ -66,6 +79,8 @@ def execute_step(
             max_long_side=int(params["max_long_side"]) if params.get("max_long_side") is not None else None,
             max_short_side=int(params["max_short_side"]) if params.get("max_short_side") is not None else None,
             upscale=bool(params.get("upscale", False)),
+            **video_quality_kwargs,
+            **image_quality_kwargs,
         )
 
     if operation == "stack_media":
@@ -75,12 +90,14 @@ def execute_step(
             output_path=params["output_path"],
             orientation=params.get("orientation", "horizontal"),
             duration_sec=float(params.get("duration_sec", 3.0)),
+            **video_quality_kwargs,
         )
 
     if operation == "concatenate_clips":
         return engine.concatenate_clips(
             clip_paths=params["clip_paths"],
             output_path=params["output_path"],
+            **video_quality_kwargs,
         )
 
     if operation == "generate_text_overlay":
@@ -102,6 +119,7 @@ def execute_step(
             paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
             paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
             compose_on_media=bool(params.get("compose_on_media", False)),
+            **image_quality_kwargs,
         )
 
     if operation == "add_text_side_box":
@@ -133,6 +151,8 @@ def execute_step(
             paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
             paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
             auto_size=bool(params.get("auto_size", True)),
+            **video_quality_kwargs,
+            **image_quality_kwargs,
         )
 
     if operation == "apply_multi_text_overlays":
@@ -143,6 +163,7 @@ def execute_step(
             output_path=params["output_path"],
             overlay_dir=overlay_dir,
             output_duration_sec=params.get("output_duration_sec"),
+            **video_quality_kwargs,
         )
 
     raise ValueError(f"Unsupported operation: {operation}")
