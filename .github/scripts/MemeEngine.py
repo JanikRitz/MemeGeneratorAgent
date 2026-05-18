@@ -106,6 +106,33 @@ class MemeEngine:
             return position, "center"
         return "center", "center"
 
+    def _position_to_pixels(
+        self,
+        position: Tuple[Any, Any],
+        base_w: int,
+        base_h: int,
+        overlay_w: int,
+        overlay_h: int,
+    ) -> Tuple[int, int]:
+        px, py = position
+        if isinstance(px, (int, float)):
+            x = int(px)
+        elif px == "center":
+            x = (base_w - overlay_w) // 2
+        elif px == "right":
+            x = base_w - overlay_w
+        else:  # "left" or unknown
+            x = 0
+        if isinstance(py, (int, float)):
+            y = int(py)
+        elif py == "center":
+            y = (base_h - overlay_h) // 2
+        elif py == "bottom":
+            y = base_h - overlay_h
+        else:  # "top" or unknown
+            y = 0
+        return x, y
+
     def _build_ffmpeg_params(
         self,
         video_crf: Optional[int],
@@ -330,6 +357,7 @@ class MemeEngine:
         start_sec: float,
         end_sec: float,
         output_path: str,
+        preview_only: bool = False,
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
@@ -338,7 +366,15 @@ class MemeEngine:
         in_p = self.resolve_path(input_path)
         out_p = self.resolve_output_path(output_path)
         self.logger.info("trim_video input=%s start=%s end=%s output=%s", in_p, start_sec, end_sec, out_p)
-        
+
+        if preview_only:
+            preview_path = out_p.with_suffix(".png")
+            with VideoFileClip(str(in_p)) as clip:
+                frame = clip.get_frame(float(start_sec))
+            Image.fromarray(frame).save(str(preview_path))
+            self.logger.info("trim_video preview_only: saved frame at t=%s to %s", start_sec, preview_path)
+            return str(preview_path)
+
         with VideoFileClip(str(in_p)) as clip:
             trimmed = clip.subclipped(start_sec, end_sec)
             fps = float(getattr(clip, "fps", 24) or 24)
@@ -412,11 +448,82 @@ class MemeEngine:
         self,
         clip_paths: List[str],
         output_path: str,
+        preview_only: bool = False,
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
     ) -> str:
+        if preview_only:
+            out_p = self.resolve_output_path(output_path)
+            frames: List[Image.Image] = []
+            for path in clip_paths:
+                try:
+                    p = self.resolve_path(path)
+                except FileNotFoundError:
+                    candidate = Path(path) if Path(path).is_absolute() else self.base_dir / path
+                    png_candidate = candidate.with_suffix(".png")
+                    if png_candidate.exists():
+                        p = png_candidate
+                    else:
+                        self.logger.warning("concatenate_clips preview: skipping missing path %s", path)
+                        continue
+
+                if self._is_video(p):
+                    with VideoFileClip(str(p)) as clip:
+                        frame = clip.get_frame(0)
+                    img = Image.fromarray(frame).convert("RGBA")
+                else:
+                    img = Image.open(str(p)).convert("RGBA")
+                frames.append(img)
+
+            if not frames:
+                raise ValueError("concatenate_clips preview: no valid frames found for any clip path")
+
+            first_frame = frames[0]
+            stack_vertical = first_frame.width >= first_frame.height
+
+            scaled: List[Image.Image] = []
+            if stack_vertical:
+                target_w = first_frame.width
+                for img in frames:
+                    if img.width != target_w:
+                        new_h = max(1, int(img.height * target_w / img.width))
+                        img = img.resize((target_w, new_h), Image.Resampling.LANCZOS)
+                    scaled.append(img)
+
+                total_h = sum(img.height for img in scaled)
+                stacked = Image.new("RGBA", (target_w, total_h), (0, 0, 0, 255))
+                y = 0
+                for img in scaled:
+                    stacked.paste(img, (0, y))
+                    y += img.height
+            else:
+                target_h = first_frame.height
+                for img in frames:
+                    if img.height != target_h:
+                        new_w = max(1, int(img.width * target_h / img.height))
+                        img = img.resize((new_w, target_h), Image.Resampling.LANCZOS)
+                    scaled.append(img)
+
+                total_w = sum(img.width for img in scaled)
+                stacked = Image.new("RGBA", (total_w, target_h), (0, 0, 0, 255))
+                x = 0
+                for img in scaled:
+                    stacked.paste(img, (x, 0))
+                    x += img.width
+
+            preview_path = out_p.with_suffix(".png")
+            stacked.save(str(preview_path))
+            orientation = "vertical" if stack_vertical else "horizontal"
+            self.logger.info(
+                "concatenate_clips preview: stacked %s frames orientation=%s to %s",
+                len(scaled),
+                orientation,
+                preview_path,
+            )
+            return str(preview_path)
+
         resolved = [self.resolve_path(path) for path in clip_paths]
         self.logger.info("concatenate_clips clip_count=%s output=%s", len(resolved), output_path)
         clips = [VideoFileClip(str(path)) for path in resolved]
@@ -770,6 +877,7 @@ class MemeEngine:
         paragraph_indent_px: int = 0,
         overlay_name: Optional[str] = None,
         output_duration_sec: Optional[float] = None,
+        preview_only: bool = False,
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
@@ -852,6 +960,7 @@ class MemeEngine:
             output_path=output_path,
             overlay_dir=overlay_dir,
             output_duration_sec=output_duration_sec,
+            preview_only=preview_only,
             video_crf=video_crf,
             video_preset=video_preset,
             video_bitrate=video_bitrate,
@@ -865,6 +974,7 @@ class MemeEngine:
         output_path: str,
         overlay_dir: str = "render",
         output_duration_sec: Optional[float] = None,
+        preview_only: bool = False,
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
@@ -872,8 +982,6 @@ class MemeEngine:
     ) -> str:
         base_path = self.resolve_path(base_media_path)
         out_p = self.resolve_output_path(output_path)
-        overlay_root = self.resolve_output_path(overlay_dir)
-        overlay_root.mkdir(parents=True, exist_ok=True)
         self.logger.info(
             "apply_multi_text_overlays base=%s overlay_count=%s output=%s",
             base_path,
@@ -882,14 +990,101 @@ class MemeEngine:
         )
 
         media_is_video = self._is_video(base_path)
+
+        if preview_only:
+            if media_is_video:
+                with VideoFileClip(str(base_path)) as clip:
+                    frame = clip.get_frame(0)
+                composite_img = Image.fromarray(frame).convert("RGBA")
+            else:
+                composite_img = Image.open(str(base_path)).convert("RGBA")
+            base_w, base_h = composite_img.size
+
+            for index, item in enumerate(overlays):
+                text_data = item.get("text")
+                if not text_data and item.get("text_structured"):
+                    text_data = "".join(part.get("text", "") for part in item["text_structured"])
+                if not text_data:
+                    self.logger.warning("overlay index=%s skipped due to empty text", index)
+                    continue
+
+                width = int(item.get("width", base_w))
+                height = int(item.get("height", int(base_h * 0.25)))
+                position = self._normalize_position(item.get("position", ["center", "top"]))
+                if bool(item.get("match_base_size", True)):
+                    width = int(base_w)
+                    height = int(base_h)
+                    position = (0, 0)
+                text_align = str(item.get("text_align", "center")).lower()
+                text_vertical_align = str(item.get("text_vertical_align", "center")).lower()
+                text_padding = int(item.get("text_padding", 24))
+                stroke_width = int(item.get("stroke_width", 3))
+                stroke_fill = item.get("stroke_fill", "#000000")
+                shadow_enabled = bool(item.get("shadow_enabled", True))
+                font_size = int(item.get("font_size", self.renderer.default_size))
+                background_color = item.get("background_color", "transparent")
+                line_height = float(item.get("line_height", 1.0))
+                paragraph_spacing = item.get("paragraph_spacing")
+                if paragraph_spacing is not None:
+                    paragraph_spacing = int(paragraph_spacing)
+                paragraph_indent_px = int(item.get("paragraph_indent_px", 0))
+
+                tokens = self.renderer.parse_tokens(text_data)
+                for token in tokens:
+                    token.setdefault("size", font_size)
+
+                canvas, metrics = self.renderer.generate_canvas(
+                    tokens,
+                    width,
+                    height,
+                    horizontal_align=text_align,
+                    vertical_align=text_vertical_align,
+                    padding=text_padding,
+                    stroke_width=stroke_width,
+                    stroke_fill=stroke_fill,
+                    shadow_enabled=shadow_enabled,
+                    background_fill=background_color,
+                    line_height=line_height,
+                    paragraph_spacing=paragraph_spacing,
+                    paragraph_indent_px=paragraph_indent_px,
+                    return_metrics=True,
+                )
+
+                if metrics.get("overflowed"):
+                    self.logger.warning(
+                        "overlay index=%s truncated text: rendered_lines=%s total_lines=%s truncated_lines=%s",
+                        index,
+                        metrics.get("rendered_lines"),
+                        metrics.get("total_lines"),
+                        metrics.get("truncated_lines"),
+                    )
+
+                canvas_rgba = canvas.convert("RGBA")
+                ox, oy = self._position_to_pixels(position, base_w, base_h, canvas_rgba.width, canvas_rgba.height)
+                composite_img.alpha_composite(canvas_rgba, dest=(max(0, ox), max(0, oy)))
+                self.logger.info("overlay index=%s composited at (%s, %s) size=%sx%s", index, ox, oy, canvas_rgba.width, canvas_rgba.height)
+
+            preview_path = out_p.with_suffix(".png")
+            composite_img.save(str(preview_path))
+            self.logger.info("apply_multi_text_overlays preview_only: saved composited image to %s", preview_path)
+            return str(preview_path)
+
+        # Normal video-composition path
+        overlay_root = self.resolve_output_path(overlay_dir)
+        overlay_root.mkdir(parents=True, exist_ok=True)
+
         if media_is_video:
             base_clip = VideoFileClip(str(base_path))
             composition_duration = base_clip.duration
+            base_w = int(base_clip.w)
+            base_h = int(base_clip.h)
         else:
             max_overlay_end = max((float(item.get("end_time", 3.0)) for item in overlays), default=3.0)
             duration = output_duration_sec or max_overlay_end
             base_clip = ImageClip(str(base_path)).with_duration(duration)
             composition_duration = duration
+            base_w = int(base_clip.w)
+            base_h = int(base_clip.h)
 
         layered_clips = [base_clip]
 
@@ -901,14 +1096,14 @@ class MemeEngine:
                 self.logger.warning("overlay index=%s skipped due to empty text", index)
                 continue
 
-            width = int(item.get("width", base_clip.w))
-            height = int(item.get("height", int(base_clip.h * 0.25)))
+            width = int(item.get("width", base_w))
+            height = int(item.get("height", int(base_h * 0.25)))
             start_time = float(item.get("start_time", 0.0))
             end_time = float(item.get("end_time", composition_duration))
             position = self._normalize_position(item.get("position", ["center", "top"]))
             if bool(item.get("match_base_size", True)):
-                width = int(base_clip.w)
-                height = int(base_clip.h)
+                width = int(base_w)
+                height = int(base_h)
                 position = (0, 0)
             text_align = str(item.get("text_align", "center")).lower()
             text_vertical_align = str(item.get("text_vertical_align", "center")).lower()

@@ -70,11 +70,16 @@ def execute_step(
     }
 
     if operation == "trim_video":
+        preview_only = bool(params.get("preview_only", False))
+        if preview_only_override is not None:
+            preview_only = preview_only_override
+
         return engine.trim_video(
             input_path=params["input_path"],
             start_sec=float(params["start_sec"]),
             end_sec=float(params["end_sec"]),
             output_path=params["output_path"],
+            preview_only=preview_only,
             **video_quality_kwargs,
         )
 
@@ -100,9 +105,14 @@ def execute_step(
         )
 
     if operation == "concatenate_clips":
+        preview_only = bool(params.get("preview_only", False))
+        if preview_only_override is not None:
+            preview_only = preview_only_override
+
         return engine.concatenate_clips(
             clip_paths=params["clip_paths"],
             output_path=params["output_path"],
+            preview_only=preview_only,
             **video_quality_kwargs,
         )
 
@@ -129,6 +139,10 @@ def execute_step(
         )
 
     if operation == "apply_text_overlay":
+        preview_only = bool(params.get("preview_only", False))
+        if preview_only_override is not None:
+            preview_only = preview_only_override
+
         overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
         return engine.apply_text_overlay(
             input_path=params["input_path"],
@@ -155,6 +169,7 @@ def execute_step(
             paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
             overlay_name=params.get("overlay_name"),
             output_duration_sec=float(params["output_duration_sec"]) if params.get("output_duration_sec") is not None else None,
+            preview_only=preview_only,
             **video_quality_kwargs,
         )
 
@@ -192,6 +207,10 @@ def execute_step(
         )
 
     if operation == "apply_multi_text_overlays":
+        preview_only = bool(params.get("preview_only", False))
+        if preview_only_override is not None:
+            preview_only = preview_only_override
+
         overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
         return engine.apply_multi_text_overlays(
             base_media_path=params["base_media_path"],
@@ -199,6 +218,7 @@ def execute_step(
             output_path=params["output_path"],
             overlay_dir=overlay_dir,
             output_duration_sec=params.get("output_duration_sec"),
+            preview_only=preview_only,
             **video_quality_kwargs,
         )
 
