@@ -7,7 +7,6 @@
     "output_path": "render/examples/image_only_overlay.png",
     "horizontal_align": "center",
     "vertical_align": "bottom",
-    "padding": 12,
     "font_size": 56,
     "line_height": 0.95
   }
