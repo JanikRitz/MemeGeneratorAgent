@@ -245,13 +245,13 @@ def rewrite_media_paths(obj: Any, project_root: Path) -> Any:
 
 def contains_stash_references(obj: Any) -> bool:
     if isinstance(obj, dict):
-        if "$stash_scene_path" in obj or "$stash_marker_time" in obj:
+        if "$stash_scene_path" in obj or "$stash_marker_time" in obj or "$stash_image_path" in obj:
             return True
         return any(contains_stash_references(value) for value in obj.values())
     if isinstance(obj, list):
         return any(contains_stash_references(item) for item in obj)
     if isinstance(obj, str):
-        return obj.startswith("stash:scene:") or obj.startswith("stash:marker:")
+        return obj.startswith("stash:scene:") or obj.startswith("stash:marker:") or obj.startswith("stash:image:")
     return False
 
 
@@ -284,6 +284,9 @@ def resolve_stash_references(obj: Any, stash: StashClient) -> Any:
         if "$stash_scene_path" in obj:
             return stash.get_scene_path(obj["$stash_scene_path"])
 
+        if "$stash_image_path" in obj:
+            return stash.get_image_path(obj["$stash_image_path"])
+
         if "$stash_marker_time" in obj:
             spec = obj["$stash_marker_time"]
             if not isinstance(spec, dict):
@@ -307,6 +310,10 @@ def resolve_stash_references(obj: Any, stash: StashClient) -> Any:
         if obj.startswith("stash:scene:"):
             scene_id = obj[len("stash:scene:") :]
             return stash.get_scene_path(scene_id)
+
+        if obj.startswith("stash:image:"):
+            image_id = obj[len("stash:image:") :]
+            return stash.get_image_path(image_id)
 
         if obj.startswith("stash:marker:"):
             spec = _parse_stash_marker_token(obj)

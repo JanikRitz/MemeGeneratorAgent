@@ -1,0 +1,20 @@
+{
+  "operation": "add_text_side_box",
+  "params": {
+    "base_media_path": "stash:image:430765",
+    "text_data": "[color=#000]Girls be Girls[/color]",
+    "side": "top",
+    "output_path": "render/examples/image_top_box_stash.png",
+    "output_duration_sec": 5.0,
+    "background_color": "#ff69b4",
+    "text_align": "center",
+    "text_vertical_align": "center",
+    "text_padding": 16,
+    "font_size": 128,
+    "stroke_width": 0,
+    "stroke_fill": "#000000",
+    "shadow_enabled": false,
+    "auto_size": true,
+    "panel_png_name": "image_top_pink_panel"
+  }
+}

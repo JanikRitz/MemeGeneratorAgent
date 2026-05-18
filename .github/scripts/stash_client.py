@@ -349,6 +349,106 @@ class StashClient:
             "Marker does not include an end time. Provide default_duration_sec to derive one"
         )
 
+    def _pick_image_lookup(self) -> Tuple[str, str, str]:
+        query_fields = self._get_query_fields()
+        for field_name in ("findImage", "image", "imageById"):
+            field = query_fields.get(field_name)
+            if not field:
+                continue
+
+            args = field.get("args") or []
+            arg_name = None
+            for candidate in ("id", "image_id", "imageId"):
+                if any(arg.get("name") == candidate for arg in args):
+                    arg_name = candidate
+                    break
+            if arg_name is None and args:
+                arg_name = args[0].get("name")
+
+            image_type_name = self._unwrap_type_name(field.get("type"))
+            if arg_name and image_type_name:
+                return field_name, arg_name, image_type_name
+
+        raise RuntimeError("Could not find an image lookup query (findImage/image/imageById) in Stash GraphQL schema")
+
+    def _query_image(self, image_id: Any, selection_set: str) -> Dict[str, Any]:
+        query_field, arg_name, _image_type = self._pick_image_lookup()
+        query = f"""
+        query GetImage($id: ID!) {{
+          {query_field}({arg_name}: $id) {{
+            {selection_set}
+          }}
+        }}
+        """
+        data = self.execute(query, {"id": str(image_id)})
+        image = data.get(query_field)
+        if not image:
+            raise RuntimeError(f"Image not found for id={image_id}")
+        return image
+
+    def _get_union_possible_type_names(self, type_name: str) -> List[str]:
+        query = """
+        query IntrospectUnion($name: String!) {
+          __type(name: $name) {
+            kind
+            possibleTypes {
+              name
+            }
+          }
+        }
+        """
+        data = self.execute(query, {"name": type_name})
+        type_info = data.get("__type") or {}
+        return [t["name"] for t in (type_info.get("possibleTypes") or []) if t.get("name")]
+
+    def get_image_path(self, image_id: Any) -> str:
+        _query_field, _arg_name, image_type_name = self._pick_image_lookup()
+        image_type = self._get_type_definition(image_type_name)
+        image_fields = {f["name"]: f for f in (image_type.get("fields") or []) if f.get("name")}
+
+        # Prefer visual_files (non-deprecated). It is a union type, so we must use
+        # inline fragments to access path — direct field introspection returns nothing.
+        if "visual_files" in image_fields:
+            vf_type_name = self._unwrap_type_name(image_fields["visual_files"].get("type"))
+            if vf_type_name:
+                member_names = self._get_union_possible_type_names(vf_type_name)
+                path_fragments: List[str] = []
+                for member in member_names:
+                    member_type = self._get_type_definition(member)
+                    member_fields = {f["name"] for f in (member_type.get("fields") or []) if f.get("name")}
+                    for path_field in ("path", "file_path", "abs_path"):
+                        if path_field in member_fields:
+                            path_fragments.append(f"... on {member} {{ {path_field} }}")
+                            break
+                if path_fragments:
+                    selection = "\n".join(path_fragments)
+                    image = self._query_image(image_id, f"visual_files {{\n{selection}\n}}")
+                    for item in (image.get("visual_files") or []):
+                        value = item.get("path") or item.get("file_path") or item.get("abs_path")
+                        if value:
+                            return str(value)
+
+        # Fall back to the deprecated files field (concrete ImageFile type with path).
+        if "files" in image_fields:
+            files_type_name = self._unwrap_type_name(image_fields["files"].get("type"))
+            if files_type_name:
+                file_type = self._get_type_definition(files_type_name)
+                file_fields = {f["name"] for f in (file_type.get("fields") or []) if f.get("name")}
+                for path_field in ("path", "file_path", "abs_path"):
+                    if path_field in file_fields:
+                        image = self._query_image(image_id, f"files {{ {path_field} }}")
+                        for item in (image.get("files") or []):
+                            value = item.get(path_field)
+                            if value:
+                                return str(value)
+
+        # NOTE: Image.paths (ImagePathsType) intentionally not used here — its fields
+        # (thumbnail, preview, image) are all HTTP URL resolvers, not filesystem paths.
+        raise RuntimeError(
+            "Could not resolve a filesystem path for image. "
+            "Expected Image.visual_files or Image.files with a path field in schema"
+        )
+
     def get_scene_bundle(self, scene_id: Any) -> Dict[str, Any]:
         # Query title and tags for the scene
         _query_field, _arg_name, scene_type_name = self._pick_scene_lookup()
