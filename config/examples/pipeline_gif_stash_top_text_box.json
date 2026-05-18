@@ -1,0 +1,36 @@
+{
+  "pipeline": [
+    {
+      "operation": "scale_media",
+      "params": {
+        "input_path": "stash:image:430765",
+        "output_path": "render/examples/gif_stash_scaled.mp4",
+        "max_long_side": 640,
+        "upscale": false,
+        "video_crf": 28,
+        "video_preset": "fast"
+      }
+    },
+    {
+      "operation": "add_text_side_box",
+      "params": {
+        "base_media_path": "$last_output",
+        "text_data": "[color=#000]Not your typical girl[/color]",
+        "side": "top",
+        "output_path": "render/examples/gif_stash_top_box.mp4",
+        "background_color": "#8c9ea0",
+        "text_align": "center",
+        "text_vertical_align": "center",
+        "text_padding": 16,
+        "font_size": 64,
+        "stroke_width": 0,
+        "shadow_enabled": false,
+        "auto_size": true,
+        "panel_png_name": "gif_stash_top_pink_panel",
+        "video_crf": 28,
+        "video_preset": "fast",
+        "font_path": "C:\\Windows\\Fonts\\IMPACT.ttf"
+      }
+    }
+  ]
+}

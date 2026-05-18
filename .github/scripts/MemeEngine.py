@@ -92,7 +92,7 @@ class MemeEngine:
         return info
 
     def _is_video(self, path: Path) -> bool:
-        return path.suffix.lower() in {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+        return path.suffix.lower() in {".mp4", ".mov", ".avi", ".mkv", ".webm", ".gif"}
 
     def resolve_path(self, path_value: str) -> Path:
         candidate = Path(path_value)

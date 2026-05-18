@@ -1,7 +1,7 @@
 {
   "operation": "add_text_side_box",
   "params": {
-    "base_media_path": "stash:image:430765",
+    "base_media_path": "stash:image:425270",
     "text_data": "[color=#000]Girls be Girls[/color]",
     "side": "top",
     "output_path": "render/examples/image_top_box_stash.png",
