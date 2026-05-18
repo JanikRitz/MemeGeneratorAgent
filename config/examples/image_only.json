@@ -9,10 +9,6 @@
     "vertical_align": "bottom",
     "padding": 12,
     "font_size": 56,
-    "line_height": 0.95,
-    "stroke_width": 3,
-    "stroke_fill": "#000000",
-    "shadow_enabled": true,
-    "background_color": "transparent"
+    "line_height": 0.95
   }
 }
