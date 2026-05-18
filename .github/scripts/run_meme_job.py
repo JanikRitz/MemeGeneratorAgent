@@ -128,6 +128,36 @@ def execute_step(
             **image_quality_kwargs,
         )
 
+    if operation == "apply_text_overlay":
+        overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
+        return engine.apply_text_overlay(
+            input_path=params["input_path"],
+            output_path=params["output_path"],
+            text=params.get("text"),
+            text_structured=params.get("text_structured"),
+            overlay_dir=overlay_dir,
+            start_time=float(params.get("start_time", 0.0)),
+            end_time=float(params["end_time"]) if params.get("end_time") is not None else None,
+            position=params.get("position", ["center", "top"]),
+            width=int(params["width"]) if params.get("width") is not None else None,
+            height=int(params["height"]) if params.get("height") is not None else None,
+            match_base_size=bool(params.get("match_base_size", True)),
+            text_align=params.get("text_align", "center"),
+            text_vertical_align=params.get("text_vertical_align", "center"),
+            text_padding=int(params.get("text_padding", 24)),
+            font_size=int(params["font_size"]) if params.get("font_size") is not None else None,
+            stroke_width=int(params.get("stroke_width", 3)),
+            stroke_fill=params.get("stroke_fill", "#000000"),
+            shadow_enabled=bool(params.get("shadow_enabled", True)),
+            background_color=params.get("background_color", "transparent"),
+            line_height=float(params.get("line_height", 1.0)),
+            paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
+            paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
+            overlay_name=params.get("overlay_name"),
+            output_duration_sec=float(params["output_duration_sec"]) if params.get("output_duration_sec") is not None else None,
+            **video_quality_kwargs,
+        )
+
     if operation == "add_text_side_box":
         preview_only = bool(params.get("preview_only", False))
         if preview_only_override is not None:

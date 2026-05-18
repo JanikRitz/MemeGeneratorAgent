@@ -9,26 +9,20 @@
         "text": "*TOP TEXT* WOW",
         "start_time": 0.0,
         "end_time": 4.5,
-        "match_base_size": true,
         "text_align": "center",
         "text_vertical_align": "top",
         "text_padding": 6,
-        "font_size": 52,
-        "stroke_width": 3,
-        "stroke_fill": "#000000"
+        "font_size": 52
       },
       {
         "overlay_name": "subline",
         "text": "<span style=\"color:#00ccff\"><i>bottom text</i></span>",
         "start_time": 3.5,
         "end_time": 7.0,
-        "match_base_size": true,
         "text_align": "center",
         "text_vertical_align": "bottom",
         "text_padding": 6,
-        "font_size": 52,
-        "stroke_width": 3,
-        "stroke_fill": "#000000"
+        "font_size": 52
       }
     ]
   }

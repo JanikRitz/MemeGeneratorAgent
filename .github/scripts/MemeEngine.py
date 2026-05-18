@@ -744,6 +744,120 @@ class MemeEngine:
         )
         return str(out_p)
 
+    def apply_text_overlay(
+        self,
+        input_path: str,
+        output_path: str,
+        text: Optional[str] = None,
+        text_structured: Optional[List[Dict[str, Any]]] = None,
+        overlay_dir: str = "render",
+        start_time: float = 0.0,
+        end_time: Optional[float] = None,
+        position: Any = ("center", "top"),
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        match_base_size: bool = True,
+        text_align: str = "center",
+        text_vertical_align: str = "center",
+        text_padding: int = 24,
+        font_size: Optional[int] = None,
+        stroke_width: int = 3,
+        stroke_fill: str = "#000000",
+        shadow_enabled: bool = True,
+        background_color: Any = "transparent",
+        line_height: float = 1.0,
+        paragraph_spacing: Optional[int] = None,
+        paragraph_indent_px: int = 0,
+        overlay_name: Optional[str] = None,
+        output_duration_sec: Optional[float] = None,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+    ) -> str:
+        if text is None and text_structured is None:
+            raise ValueError("apply_text_overlay requires text or text_structured")
+
+        resolved_width = int(width) if width is not None else None
+        resolved_height = int(height) if height is not None else None
+
+        if not bool(match_base_size) and resolved_height is None:
+            media_info = self.get_media_info(input_path)
+            overlay_width = resolved_width or int(media_info["width"])
+            overlay_height = max(1, int(round(int(media_info["height"]) * 0.25)))
+            text_data = text
+            if text_data is None and text_structured is not None:
+                text_data = "".join(part.get("text", "") for part in text_structured)
+
+            if text_data:
+                tokens = self.renderer.parse_tokens(text_data)
+                if font_size is not None:
+                    for token in tokens:
+                        token.setdefault("size", int(font_size))
+
+                _, metrics = self.renderer.generate_canvas(
+                    tokens,
+                    overlay_width,
+                    overlay_height,
+                    horizontal_align=str(text_align),
+                    vertical_align=str(text_vertical_align),
+                    padding=int(text_padding),
+                    stroke_width=int(stroke_width),
+                    stroke_fill=stroke_fill,
+                    shadow_enabled=bool(shadow_enabled),
+                    background_fill=background_color,
+                    line_height=float(line_height),
+                    paragraph_spacing=int(paragraph_spacing) if paragraph_spacing is not None else None,
+                    paragraph_indent_px=int(paragraph_indent_px),
+                    return_metrics=True,
+                )
+                required_height = int(metrics.get("text_total_height", 0)) + (int(text_padding) * 2)
+                resolved_height = max(overlay_height, required_height)
+
+        overlay_item: Dict[str, Any] = {
+            "start_time": float(start_time),
+            "position": position,
+            "match_base_size": bool(match_base_size),
+            "text_align": str(text_align),
+            "text_vertical_align": str(text_vertical_align),
+            "text_padding": int(text_padding),
+            "stroke_width": int(stroke_width),
+            "stroke_fill": stroke_fill,
+            "shadow_enabled": bool(shadow_enabled),
+            "background_color": background_color,
+            "line_height": float(line_height),
+            "paragraph_indent_px": int(paragraph_indent_px),
+        }
+
+        if text is not None:
+            overlay_item["text"] = text
+        if text_structured is not None:
+            overlay_item["text_structured"] = text_structured
+        if end_time is not None:
+            overlay_item["end_time"] = float(end_time)
+        if resolved_width is not None:
+            overlay_item["width"] = resolved_width
+        if resolved_height is not None:
+            overlay_item["height"] = resolved_height
+        if font_size is not None:
+            overlay_item["font_size"] = int(font_size)
+        if paragraph_spacing is not None:
+            overlay_item["paragraph_spacing"] = int(paragraph_spacing)
+        if overlay_name:
+            overlay_item["overlay_name"] = overlay_name
+
+        return self.apply_multi_text_overlays(
+            base_media_path=input_path,
+            overlays=[overlay_item],
+            output_path=output_path,
+            overlay_dir=overlay_dir,
+            output_duration_sec=output_duration_sec,
+            video_crf=video_crf,
+            video_preset=video_preset,
+            video_bitrate=video_bitrate,
+            audio_bitrate=audio_bitrate,
+        )
+
     def apply_multi_text_overlays(
         self,
         base_media_path: str,
@@ -792,7 +906,7 @@ class MemeEngine:
             start_time = float(item.get("start_time", 0.0))
             end_time = float(item.get("end_time", composition_duration))
             position = self._normalize_position(item.get("position", ["center", "top"]))
-            if bool(item.get("match_base_size", False)):
+            if bool(item.get("match_base_size", True)):
                 width = int(base_clip.w)
                 height = int(base_clip.h)
                 position = (0, 0)

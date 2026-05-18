@@ -255,6 +255,15 @@ Notes:
 - Optional style params: `horizontal_align`, `vertical_align`, `padding`, `font_size`, `line_height`, `paragraph_spacing`, `paragraph_indent_px`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `background_color`
 - Optional image quality params: `image_quality`, `png_compress_level`, `optimize`
 
+### `apply_text_overlay`
+- Params: `input_path`, `output_path`
+- Text params: provide one of `text` or `text_structured`
+- Optional: `start_time`, `end_time`, `position`, `width`, `height`, `match_base_size`, `overlay_name`, `output_duration_sec` (used for image bases)
+- Optional style params: `text_align`, `text_vertical_align`, `text_padding`, `font_size`, `line_height`, `paragraph_spacing`, `paragraph_indent_px`, `stroke_width`, `stroke_fill`, `shadow_enabled`, `background_color`
+- Optional quality params: `video_crf`, `video_preset`, `video_bitrate`, `audio_bitrate`
+- Behavior: convenience wrapper over `apply_multi_text_overlays` for the common single-caption case
+- If `height` is omitted and `match_base_size=false`, the overlay auto-grows vertically to fit the rendered text instead of using a fixed truncated caption band
+
 ### `apply_multi_text_overlays`
 - Params: `base_media_path`, `overlays`, `output_path`
 - Optional: `output_duration_sec` (used for image bases)
