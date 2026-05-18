@@ -689,15 +689,22 @@ class MemeEngine:
             raise ValueError("side must be one of: top, bottom, left, right")
 
         media_is_video = self._is_video(base_path)
-        if media_is_video:
+        if preview_only:
+            media_info = self.get_media_info(base_media_path)
+            base_w = int(media_info["width"])
+            base_h = int(media_info["height"])
+            base_clip = None
+            duration = float(output_duration_sec or media_info.get("duration_sec") or 5.0)
+        elif media_is_video:
             base_clip = VideoFileClip(str(base_path))
             duration = float(base_clip.duration)
+            base_w = int(base_clip.w)
+            base_h = int(base_clip.h)
         else:
             duration = float(output_duration_sec or 5.0)
             base_clip = self._clip_with_duration(ImageClip(str(base_path)), duration)
-
-        base_w = int(base_clip.w)
-        base_h = int(base_clip.h)
+            base_w = int(base_clip.w)
+            base_h = int(base_clip.h)
 
         renderer = self._get_renderer(font_path)
         tokens = renderer.parse_tokens(text_data)
@@ -805,11 +812,33 @@ class MemeEngine:
             )
 
         if preview_only:
-            self.logger.info(
-                "add_text_side_box preview_only enabled, skipping video render and returning panel png=%s",
-                panel_png_path,
+            if media_is_video:
+                with VideoFileClip(str(base_path)) as clip:
+                    frame = clip.get_frame(0)
+                base_img = Image.fromarray(frame).convert("RGBA")
+            else:
+                base_img = Image.open(str(base_path)).convert("RGBA")
+
+            if base_img.size != (base_w, base_h):
+                base_img = base_img.resize((base_w, base_h), Image.Resampling.LANCZOS)
+
+            composed_preview = Image.new("RGBA", (final_w, final_h), (0, 0, 0, 0))
+            composed_preview.paste(base_img, base_position)
+            composed_preview.paste(panel_canvas.convert("RGBA"), panel_position)
+
+            preview_path = out_p.with_suffix(".png")
+            self._save_image(
+                composed_preview,
+                preview_path,
+                image_quality=image_quality,
+                png_compress_level=png_compress_level,
+                optimize=optimize,
             )
-            return str(panel_png_path)
+            self.logger.info(
+                "add_text_side_box preview_only enabled, skipping video render and returning composed preview=%s",
+                preview_path,
+            )
+            return str(preview_path)
 
         image_output_exts = {".png", ".jpg", ".jpeg", ".webp"}
         if (not media_is_video) and out_p.suffix.lower() in image_output_exts:
