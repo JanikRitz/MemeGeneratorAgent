@@ -558,7 +558,7 @@ class MemeEngine:
         media_path: Optional[str] = None,
         horizontal_align: str = "center",
         vertical_align: str = "center",
-        padding: int = 24,
+        padding: int = 6,
         stroke_width: int = 3,
         stroke_fill: str = "#000000",
         shadow_enabled: bool = True,
@@ -658,7 +658,7 @@ class MemeEngine:
         background_color: Any = "#101010",
         text_align: str = "center",
         text_vertical_align: str = "center",
-        text_padding: int = 24,
+        text_padding: int = 6,
         font_size: Optional[int] = None,
         font_path: Optional[str] = None,
         stroke_width: int = 3,
@@ -907,7 +907,7 @@ class MemeEngine:
         match_base_size: bool = True,
         text_align: str = "center",
         text_vertical_align: str = "center",
-        text_padding: int = 24,
+        text_padding: int = 6,
         font_size: Optional[int] = None,
         font_path: Optional[str] = None,
         stroke_width: int = 3,
@@ -1062,7 +1062,7 @@ class MemeEngine:
                     position = (0, 0)
                 text_align = str(item.get("text_align", "center")).lower()
                 text_vertical_align = str(item.get("text_vertical_align", "center")).lower()
-                text_padding = int(item.get("text_padding", 24))
+                text_padding = int(item.get("text_padding", 6))
                 stroke_width = int(item.get("stroke_width", 3))
                 stroke_fill = item.get("stroke_fill", "#000000")
                 shadow_enabled = bool(item.get("shadow_enabled", True))
@@ -1153,7 +1153,7 @@ class MemeEngine:
                 position = (0, 0)
             text_align = str(item.get("text_align", "center")).lower()
             text_vertical_align = str(item.get("text_vertical_align", "center")).lower()
-            text_padding = int(item.get("text_padding", 24))
+            text_padding = int(item.get("text_padding", 6))
             stroke_width = int(item.get("stroke_width", 3))
             stroke_fill = item.get("stroke_fill", "#000000")
             shadow_enabled = bool(item.get("shadow_enabled", True))
