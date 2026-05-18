@@ -51,6 +51,7 @@ def execute_step(
     step: Dict[str, Any],
     last_output: str = "",
     preview_only_override: Optional[bool] = None,
+    default_font_path: Optional[str] = None,
 ) -> str:
     operation = step.get("operation")
     params = step.get("params", {})
@@ -135,6 +136,7 @@ def execute_step(
             paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
             paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
             compose_on_media=bool(params.get("compose_on_media", False)),
+            font_path=params.get("font_path") or default_font_path,
             **image_quality_kwargs,
         )
 
@@ -160,6 +162,7 @@ def execute_step(
             text_vertical_align=params.get("text_vertical_align", "center"),
             text_padding=int(params.get("text_padding", 24)),
             font_size=int(params["font_size"]) if params.get("font_size") is not None else None,
+            font_path=params.get("font_path") or default_font_path,
             stroke_width=int(params.get("stroke_width", 3)),
             stroke_fill=params.get("stroke_fill", "#000000"),
             shadow_enabled=bool(params.get("shadow_enabled", True)),
@@ -192,6 +195,7 @@ def execute_step(
             text_vertical_align=params.get("text_vertical_align", "center"),
             text_padding=int(params.get("text_padding", 24)),
             font_size=int(params["font_size"]) if params.get("font_size") is not None else None,
+            font_path=params.get("font_path") or default_font_path,
             stroke_width=int(params.get("stroke_width", 3)),
             stroke_fill=params.get("stroke_fill", "#000000"),
             shadow_enabled=bool(params.get("shadow_enabled", True)),
@@ -218,6 +222,7 @@ def execute_step(
             output_path=params["output_path"],
             overlay_dir=overlay_dir,
             output_duration_sec=params.get("output_duration_sec"),
+            font_path=params.get("font_path") or default_font_path,
             preview_only=preview_only,
             **video_quality_kwargs,
         )
@@ -497,6 +502,7 @@ def main() -> None:
                             step,
                             last_output=last_output,
                             preview_only_override=(True if args.preview_only else None),
+                            default_font_path=config.get("font_path"),
                         )
                         logger.info("Step %s output: %s", index, last_output)
                     run_result = last_output
@@ -507,6 +513,7 @@ def main() -> None:
                         engine,
                         config,
                         preview_only_override=(True if args.preview_only else None),
+                        default_font_path=config.get("font_path"),
                     )
                     logger.info("Operation output: %s", run_result)
                     print(run_result)
@@ -548,6 +555,7 @@ def main() -> None:
                 step,
                 last_output=last_output,
                 preview_only_override=(True if args.preview_only else None),
+                default_font_path=config.get("font_path"),
             )
             logger.info("Step %s output: %s", index, last_output)
         if args.release and last_output:
@@ -562,6 +570,7 @@ def main() -> None:
         engine,
         config,
         preview_only_override=(True if args.preview_only else None),
+        default_font_path=config.get("font_path"),
     )
     logger.info("Operation output: %s", output)
     if args.release and output:

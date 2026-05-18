@@ -22,7 +22,8 @@
             "end_time": 4.0,
             "match_base_size": true,
             "text_align": "center",
-            "text_vertical_align": "bottom"
+            "text_vertical_align": "bottom",
+            "font_path": "C:\\Windows\\Fonts\\ARIAL.ttf"
           }
         ]
       }

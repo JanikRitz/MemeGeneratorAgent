@@ -33,6 +33,14 @@ class MemeEngine:
         self.logger = logger or logging.getLogger("meme_engine")
         self.renderer = RichTextRenderer()
 
+    def _get_renderer(self, font_path: Optional[str] = None) -> "RichTextRenderer":
+        if not font_path:
+            return self.renderer
+        fp = Path(font_path)
+        if fp == self.renderer.default_font_path:
+            return self.renderer
+        return RichTextRenderer(default_font_path=str(fp), default_size=self.renderer.default_size)
+
     def _clip_with_position(self, clip, position):
         if hasattr(clip, "with_position"):
             return clip.with_position(position)
@@ -560,6 +568,7 @@ class MemeEngine:
         paragraph_spacing: Optional[int] = None,
         paragraph_indent_px: int = 0,
         compose_on_media: bool = False,
+        font_path: Optional[str] = None,
         image_quality: Optional[int] = None,
         png_compress_level: Optional[int] = None,
         optimize: Optional[bool] = None,
@@ -576,12 +585,13 @@ class MemeEngine:
 
         out_p = self.resolve_output_path(output_path)
         self.logger.info("generate_text_overlay output=%s width=%s height=%s media_path=%s", out_p, video_width, video_height, media_path)
-        tokens = self.renderer.parse_tokens(text_data)
+        renderer = self._get_renderer(font_path)
+        tokens = renderer.parse_tokens(text_data)
         if font_size:
             for token in tokens:
                 token.setdefault("size", int(font_size))
 
-        canvas, metrics = self.renderer.generate_canvas(
+        canvas, metrics = renderer.generate_canvas(
             tokens,
             video_width,
             video_height,
@@ -650,6 +660,7 @@ class MemeEngine:
         text_vertical_align: str = "center",
         text_padding: int = 24,
         font_size: Optional[int] = None,
+        font_path: Optional[str] = None,
         stroke_width: int = 3,
         stroke_fill: str = "#000000",
         shadow_enabled: bool = True,
@@ -688,13 +699,14 @@ class MemeEngine:
         base_w = int(base_clip.w)
         base_h = int(base_clip.h)
 
-        tokens = self.renderer.parse_tokens(text_data)
+        renderer = self._get_renderer(font_path)
+        tokens = renderer.parse_tokens(text_data)
         if font_size:
             for token in tokens:
                 token.setdefault("size", int(font_size))
 
         def _measure_panel(width: int, height: int) -> Dict[str, Any]:
-            _, metrics = self.renderer.generate_canvas(
+            _, metrics = renderer.generate_canvas(
                 tokens,
                 max(1, int(width)),
                 max(1, int(height)),
@@ -762,7 +774,7 @@ class MemeEngine:
             base_position = (panel_w, 0) if side_value == "left" else (0, 0)
             panel_position = (0, 0) if side_value == "left" else (base_w, 0)
 
-        panel_canvas, metrics = self.renderer.generate_canvas(
+        panel_canvas, metrics = renderer.generate_canvas(
             tokens,
             panel_w,
             panel_h,
@@ -868,6 +880,7 @@ class MemeEngine:
         text_vertical_align: str = "center",
         text_padding: int = 24,
         font_size: Optional[int] = None,
+        font_path: Optional[str] = None,
         stroke_width: int = 3,
         stroke_fill: str = "#000000",
         shadow_enabled: bool = True,
@@ -898,12 +911,13 @@ class MemeEngine:
                 text_data = "".join(part.get("text", "") for part in text_structured)
 
             if text_data:
-                tokens = self.renderer.parse_tokens(text_data)
+                _renderer = self._get_renderer(font_path)
+                tokens = _renderer.parse_tokens(text_data)
                 if font_size is not None:
                     for token in tokens:
                         token.setdefault("size", int(font_size))
 
-                _, metrics = self.renderer.generate_canvas(
+                _, metrics = _renderer.generate_canvas(
                     tokens,
                     overlay_width,
                     overlay_height,
@@ -960,6 +974,7 @@ class MemeEngine:
             output_path=output_path,
             overlay_dir=overlay_dir,
             output_duration_sec=output_duration_sec,
+            font_path=font_path,
             preview_only=preview_only,
             video_crf=video_crf,
             video_preset=video_preset,
@@ -974,6 +989,7 @@ class MemeEngine:
         output_path: str,
         overlay_dir: str = "render",
         output_duration_sec: Optional[float] = None,
+        font_path: Optional[str] = None,
         preview_only: bool = False,
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
@@ -1021,7 +1037,8 @@ class MemeEngine:
                 stroke_width = int(item.get("stroke_width", 3))
                 stroke_fill = item.get("stroke_fill", "#000000")
                 shadow_enabled = bool(item.get("shadow_enabled", True))
-                font_size = int(item.get("font_size", self.renderer.default_size))
+                item_renderer = self._get_renderer(item.get("font_path") or font_path)
+                font_size = int(item.get("font_size", item_renderer.default_size))
                 background_color = item.get("background_color", "transparent")
                 line_height = float(item.get("line_height", 1.0))
                 paragraph_spacing = item.get("paragraph_spacing")
@@ -1029,11 +1046,11 @@ class MemeEngine:
                     paragraph_spacing = int(paragraph_spacing)
                 paragraph_indent_px = int(item.get("paragraph_indent_px", 0))
 
-                tokens = self.renderer.parse_tokens(text_data)
+                tokens = item_renderer.parse_tokens(text_data)
                 for token in tokens:
                     token.setdefault("size", font_size)
 
-                canvas, metrics = self.renderer.generate_canvas(
+                canvas, metrics = item_renderer.generate_canvas(
                     tokens,
                     width,
                     height,
@@ -1111,7 +1128,8 @@ class MemeEngine:
             stroke_width = int(item.get("stroke_width", 3))
             stroke_fill = item.get("stroke_fill", "#000000")
             shadow_enabled = bool(item.get("shadow_enabled", True))
-            font_size = int(item.get("font_size", self.renderer.default_size))
+            item_renderer = self._get_renderer(item.get("font_path") or font_path)
+            font_size = int(item.get("font_size", item_renderer.default_size))
             background_color = item.get("background_color", "transparent")
             line_height = float(item.get("line_height", 1.0))
             paragraph_spacing = item.get("paragraph_spacing")
@@ -1122,11 +1140,11 @@ class MemeEngine:
             overlay_name = item.get("overlay_name", f"overlay_{index:03d}") + ".png"
             overlay_path = overlay_root / overlay_name
 
-            tokens = self.renderer.parse_tokens(text_data)
+            tokens = item_renderer.parse_tokens(text_data)
             for token in tokens:
                 token.setdefault("size", font_size)
 
-            canvas, metrics = self.renderer.generate_canvas(
+            canvas, metrics = item_renderer.generate_canvas(
                 tokens,
                 width,
                 height,
