@@ -33,19 +33,19 @@ Avoid calling `python` directly unless you explicitly need a specific interprete
 ### Run a job config
 
 ```powershell
-uv run .github/scripts/run_meme_job.py --config config/examples/example_overlay.json
+uv run .github/scripts/run_meme_job.py --config config/examples/video_multi_text_overlay.json
 ```
 
 Force preview-only mode from CLI (without editing config):
 
 ```powershell
-uv run .github/scripts/run_meme_job.py --config config/examples/example_side_box_right.json --preview-only
+uv run .github/scripts/run_meme_job.py --config config/examples/vertical_video_right_text_box.json --preview-only
 ```
 
 Positional config path also works:
 
 ```powershell
-uv run .github/scripts/run_meme_job.py config/examples/example_overlay.json
+uv run .github/scripts/run_meme_job.py config/examples/video_multi_text_overlay.json
 ```
 
 The command prints the final output path and writes a timestamped run log file.
@@ -353,19 +353,24 @@ Each overlay item can include:
 
 ## Quick Examples
 
-- Timed text overlays: `config/examples/example_overlay.json`
-- Trim + caption pipeline: `config/examples/example_pipeline.json`
-- Scale then top side-box (image): `config/examples/scale_then_top_box_image.json`
-- Top side-box with hard JPEG compression: `config/examples/side_box_top_image_crunchy.json`
-- Top side-box super crunchy JPEG: `config/examples/side_box_top_image_super_crunchy.json`
-- Top side-box balanced JPEG: `config/examples/side_box_top_image_balanced.json`
-- Top side-box relatively good JPEG: `config/examples/side_box_top_image_good.json`
-- Side box (right): `config/examples/example_side_box_right.json`
-- Side box (bottom, dense text): `config/examples/example_side_box_bottom.json`
-- Video trim + scale + overlay with heavier compression: `config/examples/video_trim_scale_overlay.json`
-- Video trim + scale + overlay super crunchy: `config/examples/video_trim_scale_overlay_super_crunchy.json`
-- Video trim + scale + overlay balanced: `config/examples/video_trim_scale_overlay_balanced.json`
-- Video trim + scale + overlay relatively good: `config/examples/video_trim_scale_overlay_good.json`
+- Image with text overlay (PNG): `config/examples/image_text_overlay.json`
+- Video with multiple timed text overlays: `config/examples/video_multi_text_overlay.json`
+- Pipeline — video trim then caption: `config/examples/pipeline_video_trim_then_caption.json`
+- Pipeline — image scale then top text box: `config/examples/pipeline_image_scale_top_text_box.json`
+- Image with top text box: `config/examples/image_top_text_box.json`
+- Image + top text box, JPEG quality good (82): `config/examples/image_top_text_box_quality_good.json`
+- Image + top text box, JPEG quality balanced (42): `config/examples/image_top_text_box_quality_balanced.json`
+- Image + top text box, JPEG quality crunchy (24): `config/examples/image_top_text_box_quality_crunchy.json`
+- Image + top text box, JPEG quality super crunchy (14): `config/examples/image_top_text_box_quality_super_crunchy.json`
+- Vertical video with right text box: `config/examples/vertical_video_right_text_box.json`
+- Video with bottom text box (dense text): `config/examples/video_bottom_text_box.json`
+- Horizontal stack of video + image: `config/examples/video_image_stack_horizontal.json`
+- Simple video trim: `config/examples/video_trim.json`
+- Pipeline — Stash trim by marker then scale: `config/examples/pipeline_stash_trim_by_marker_scale.json`
+- Pipeline — video trim + scale + multi text overlay: `config/examples/pipeline_video_trim_scale_multi_overlay.json`
+- Pipeline — trim + scale + multi overlay, quality good: `config/examples/pipeline_video_trim_scale_multi_overlay_quality_good.json`
+- Pipeline — trim + scale + multi overlay, quality balanced: `config/examples/pipeline_video_trim_scale_multi_overlay_quality_balanced.json`
+- Pipeline — trim + scale + multi overlay, quality super crunchy: `config/examples/pipeline_video_trim_scale_multi_overlay_quality_super_crunchy.json`
 - Side box fast preview (PNG only): pass `--preview-only` flag or set `"preview_only": true` in config
 - Media metadata query: `uv run .github/scripts/get_media_info.py media/input.mp4`
 
