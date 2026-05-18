@@ -4,7 +4,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from MemeEngine import MemeEngine
 
@@ -343,6 +343,87 @@ def get_output_path_from_config(cfg: Dict[str, Any]) -> Optional[Path]:
     return None
 
 
+def collect_generated_file_paths(cfg: Dict[str, Any]) -> Set[Path]:
+    paths: Set[Path] = set()
+    steps = cfg.get("pipeline", [cfg]) if "pipeline" in cfg else [cfg]
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        operation = step.get("operation")
+        params = step.get("params", {})
+        if not isinstance(params, dict):
+            continue
+
+        output_raw = params.get("output_path")
+        output_path = Path(output_raw) if isinstance(output_raw, str) else None
+        if output_path is not None:
+            paths.add(output_path)
+            # Preview outputs are written as output_path with a .png extension.
+            paths.add(output_path.with_suffix(".png"))
+
+        if operation == "apply_multi_text_overlays":
+            overlay_dir_raw = params.get("overlay_dir")
+            if not isinstance(overlay_dir_raw, str) and output_path is not None:
+                overlay_dir_raw = str(output_path.parent)
+            if isinstance(overlay_dir_raw, str):
+                overlay_dir = Path(overlay_dir_raw)
+                overlays = params.get("overlays", [])
+                if isinstance(overlays, list):
+                    for index, item in enumerate(overlays):
+                        if not isinstance(item, dict):
+                            continue
+                        name = item.get("overlay_name", f"overlay_{index:03d}")
+                        if isinstance(name, str) and name:
+                            file_name = name if name.lower().endswith(".png") else f"{name}.png"
+                            paths.add(overlay_dir / file_name)
+
+        elif operation == "apply_text_overlay":
+            overlay_dir_raw = params.get("overlay_dir")
+            if not isinstance(overlay_dir_raw, str) and output_path is not None:
+                overlay_dir_raw = str(output_path.parent)
+            if isinstance(overlay_dir_raw, str):
+                overlay_dir = Path(overlay_dir_raw)
+                name = params.get("overlay_name")
+                if isinstance(name, str) and name:
+                    file_name = name if name.lower().endswith(".png") else f"{name}.png"
+                    paths.add(overlay_dir / file_name)
+                else:
+                    paths.add(overlay_dir / "overlay_000.png")
+
+        elif operation == "add_text_side_box":
+            overlay_dir_raw = params.get("overlay_dir")
+            if not isinstance(overlay_dir_raw, str) and output_path is not None:
+                overlay_dir_raw = str(output_path.parent)
+            if isinstance(overlay_dir_raw, str):
+                overlay_dir = Path(overlay_dir_raw)
+                side = str(params.get("side", "top")).lower()
+                panel_name = params.get("panel_png_name") or f"side_box_{side}"
+                if isinstance(panel_name, str) and panel_name:
+                    file_name = panel_name if panel_name.lower().endswith(".png") else f"{panel_name}.png"
+                    paths.add(overlay_dir / file_name)
+
+    return paths
+
+
+def cleanup_files(paths: Set[Path], keep_path: Optional[Path] = None, logger: Optional[logging.Logger] = None) -> int:
+    removed = 0
+    keep_resolved = str(keep_path.resolve()) if keep_path is not None else None
+
+    for path in sorted(paths, key=lambda p: str(p)):
+        try:
+            if keep_resolved is not None and str(path.resolve()) == keep_resolved:
+                continue
+            if path.exists() and path.is_file():
+                path.unlink()
+                removed += 1
+        except Exception as exc:
+            if logger:
+                logger.warning("cleanup failed for %s: %s", path, exc)
+
+    return removed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run MemeEngine jobs from a JSON config file.")
     parser.add_argument("config_path", nargs="?", help="Path to JSON config (positional)")
@@ -351,6 +432,11 @@ def main() -> None:
         "--preview-only",
         action="store_true",
         help="Force preview-only mode for add_text_side_box operations, overriding config",
+    )
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="Release mode: clean old intermediate/preview files and keep only the final output artifact",
     )
     args = parser.parse_args()
 
@@ -377,18 +463,30 @@ def main() -> None:
 
             config = rewrite_media_paths(config, project_root)
             config = maybe_resolve_stash_references(config)
+            generated_files = collect_generated_file_paths(config) if args.release else set()
 
             output_path = get_output_path_from_config(config)
             if output_path and output_path.exists():
                 if output_path.stat().st_mtime > cfg_file.stat().st_mtime:
+                    if args.release:
+                        removed = cleanup_files(generated_files, keep_path=output_path)
+                        if removed:
+                            print(f"Release cleanup for {cfg_file}: removed {removed} stale intermediates/previews")
                     print(f"Skipping {cfg_file} (output newer than config)")
                     continue
 
             logger = setup_logging(project_root / "logs")
             engine = MemeEngine(base_dir=str(project_root), logger=logger)
 
+            if args.release:
+                # Keep an existing final artifact until a new run succeeds.
+                removed = cleanup_files(generated_files, keep_path=output_path, logger=logger)
+                if removed:
+                    print(f"Release pre-cleanup for {cfg_file}: removed {removed} stale intermediates/previews")
+
             print(f"Running config: {cfg_file}")
             try:
+                run_result = ""
                 if "pipeline" in config:
                     logger.info("Running pipeline with %s steps", len(config["pipeline"]))
                     last_output = ""
@@ -401,16 +499,22 @@ def main() -> None:
                             preview_only_override=(True if args.preview_only else None),
                         )
                         logger.info("Step %s output: %s", index, last_output)
-                    print(last_output)
+                    run_result = last_output
+                    print(run_result)
                 else:
                     logger.info("Running single operation: %s", config.get("operation"))
-                    output = execute_step(
+                    run_result = execute_step(
                         engine,
                         config,
                         preview_only_override=(True if args.preview_only else None),
                     )
-                    logger.info("Operation output: %s", output)
-                    print(output)
+                    logger.info("Operation output: %s", run_result)
+                    print(run_result)
+
+                if args.release and run_result:
+                    removed = cleanup_files(generated_files, keep_path=Path(run_result), logger=logger)
+                    if removed:
+                        print(f"Release post-cleanup for {cfg_file}: removed {removed} intermediate/preview files")
             except Exception as e:
                 print(f"Error running {cfg_file}: {e}")
         return
@@ -423,9 +527,16 @@ def main() -> None:
 
     config = rewrite_media_paths(config, project_root)
     config = maybe_resolve_stash_references(config)
+    generated_files = collect_generated_file_paths(config) if args.release else set()
+    output_path = get_output_path_from_config(config)
 
     logger = setup_logging(project_root / "logs")
     engine = MemeEngine(base_dir=str(project_root), logger=logger)
+
+    if args.release:
+        removed = cleanup_files(generated_files, keep_path=output_path, logger=logger)
+        if removed:
+            print(f"Release pre-cleanup: removed {removed} stale intermediates/previews")
 
     if "pipeline" in config:
         logger.info("Running pipeline with %s steps", len(config["pipeline"]))
@@ -439,6 +550,10 @@ def main() -> None:
                 preview_only_override=(True if args.preview_only else None),
             )
             logger.info("Step %s output: %s", index, last_output)
+        if args.release and last_output:
+            removed = cleanup_files(generated_files, keep_path=Path(last_output), logger=logger)
+            if removed:
+                print(f"Release post-cleanup: removed {removed} intermediate/preview files")
         print(last_output)
         return
 
@@ -449,6 +564,10 @@ def main() -> None:
         preview_only_override=(True if args.preview_only else None),
     )
     logger.info("Operation output: %s", output)
+    if args.release and output:
+        removed = cleanup_files(generated_files, keep_path=Path(output), logger=logger)
+        if removed:
+            print(f"Release post-cleanup: removed {removed} intermediate/preview files")
     print(output)
 
 
