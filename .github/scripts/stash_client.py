@@ -141,24 +141,15 @@ class StashClient:
                 id
                 title
                 details
-                url
                 date
                 rating100
-                organized
                 files {
-                  id
                   path
-                  size
-                  duration
-                  video_codec
-                  audio_codec
                 }
                 performers {
-                  id
                   name
                 }
                 tags {
-                  id
                   name
                 }
                 studio {
@@ -170,7 +161,13 @@ class StashClient:
             """
         )
         result = self.client.execute(query, variable_values={"id": str(scene_id)})
-        return result.get("findScene") or {}
+        scene = result.get("findScene")
+        if not scene:
+            return {}
+        scene["files"] = [f["path"] for f in scene.get("files") or []]
+        scene["performers"] = [p["name"] for p in scene.get("performers") or []]
+        scene["tags"] = [t["name"] for t in scene.get("tags") or []]
+        return scene
 
     def get_image_bundle(self, image_id: Any) -> Dict[str, Any]:
         """
