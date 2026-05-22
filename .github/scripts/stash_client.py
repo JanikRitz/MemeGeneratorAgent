@@ -156,6 +156,15 @@ class StashClient:
                   id
                   name
                 }
+                scene_markers {
+                  id
+                  title
+                  seconds
+                  end_seconds
+                  primary_tag {
+                    name
+                  }
+                }
               }
             }
             """
@@ -167,6 +176,17 @@ class StashClient:
         scene["files"] = [f["path"] for f in scene.get("files") or []]
         scene["performers"] = [p["name"] for p in scene.get("performers") or []]
         scene["tags"] = [t["name"] for t in scene.get("tags") or []]
+        if scene["studio"]: scene["studio"] = scene["studio"]["name"]
+        scene["scene_markers"] = [
+            {
+                "id": m["id"],
+                "title": m.get("title"),
+                # "seconds": m.get("seconds"),
+                # "end_seconds": m.get("end_seconds"),
+                "primary_tag": (m.get("primary_tag") or {}).get("name"),
+            }
+            for m in scene.get("scene_markers") or []
+        ]
         return scene
 
     def get_image_bundle(self, image_id: Any) -> Dict[str, Any]:
