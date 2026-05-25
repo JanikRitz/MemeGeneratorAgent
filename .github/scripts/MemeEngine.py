@@ -1,4 +1,6 @@
 import logging
+import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -33,10 +35,69 @@ class MemeEngine:
         self.logger = logger or logging.getLogger("meme_engine")
         self.renderer = RichTextRenderer()
 
+    @staticmethod
+    def _resolve_font_path(font_name_or_path: str) -> Path:
+        """Resolve a font name or path to an existing font file.
+
+        Accepts:
+        - An absolute or relative path to an existing font file.
+        - A bare font family name (e.g. "Montserrat"), which is searched
+          for in the system and user font directories. The file whose stem
+          most closely matches the name without extra style tokens (italic,
+          bold, etc.) is preferred as the regular-weight base font.
+        """
+        candidate = Path(font_name_or_path)
+        if candidate.exists():
+            return candidate
+
+        # If the value has directory separators it was intended as an explicit
+        # path — don't silently fall through to a name search.
+        if candidate.parent != Path("."):
+            raise FileNotFoundError(f"Font file not found: {font_name_or_path}")
+
+        font_dirs = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Fonts",
+            Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts",
+        ]
+
+        _style_tokens = {
+            "italic", "bold", "bd", "bi", "light", "thin", "heavy",
+            "black", "medium", "semibold", "extrabold", "extralight",
+        }
+
+        name_lower = candidate.stem.lower()  # supports "Montserrat" or "Montserrat.ttf"
+        want_ext = candidate.suffix.lower() if candidate.suffix else None
+
+        matches = []
+        for font_dir in font_dirs:
+            if not font_dir.exists():
+                continue
+            for f in font_dir.iterdir():
+                if f.suffix.lower() not in {".ttf", ".otf", ".ttc"}:
+                    continue
+                if want_ext and f.suffix.lower() != want_ext:
+                    continue
+                stem_lower = f.stem.lower()
+                if not stem_lower.startswith(name_lower):
+                    continue
+                remainder = stem_lower[len(name_lower):].strip("-_ ")
+                parts = re.split(r"[-_]", remainder)
+                style_count = sum(1 for p in parts if p in _style_tokens)
+                matches.append((style_count, f.name.lower(), f))
+
+        if not matches:
+            raise FileNotFoundError(
+                f"No font file found matching '{font_name_or_path}' in system font directories. "
+                f"Searched: {[str(d) for d in font_dirs if d.exists()]}"
+            )
+
+        matches.sort(key=lambda x: (x[0], x[1]))
+        return matches[0][2]
+
     def _get_renderer(self, font_path: Optional[str] = None) -> "RichTextRenderer":
         if not font_path:
             return self.renderer
-        fp = Path(font_path)
+        fp = self._resolve_font_path(font_path)
         if fp == self.renderer.default_font_path:
             return self.renderer
         return RichTextRenderer(default_font_path=str(fp), default_size=self.renderer.default_size)

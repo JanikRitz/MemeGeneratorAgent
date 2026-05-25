@@ -28,15 +28,29 @@ class RichTextRenderer:
 
         if bold and italic:
             variant_suffixes = ["bi", "z", "bolditalic"]
+            variable_inserts = ["bold-italic", "bolditalic"]
         elif bold:
             variant_suffixes = ["bd", "b", "bold"]
+            variable_inserts = ["bold"]
         else:
             variant_suffixes = ["i", "italic"]
+            variable_inserts = ["italic"]
 
         for s in variant_suffixes:
             candidate = folder / (stem + s + suffix)
             if candidate.exists():
                 return candidate
+
+        # Also try inserting the style label before "-variablefont" in the stem.
+        # This handles fonts like Montserrat whose italic variant is named
+        # "Montserrat-Italic-VariableFont_wght.ttf" rather than appending a suffix.
+        variable_marker = "-variablefont"
+        if variable_marker in stem:
+            for insert in variable_inserts:
+                new_stem = stem.replace(variable_marker, f"-{insert}{variable_marker}", 1)
+                for candidate_path in folder.iterdir():
+                    if candidate_path.suffix.lower() == suffix.lower() and candidate_path.stem.lower() == new_stem:
+                        return candidate_path
 
         style_label = "bold+italic" if bold and italic else ("bold" if bold else "italic")
         warn_key = (self.default_font_path.name, style_label)
