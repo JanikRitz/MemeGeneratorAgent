@@ -1,0 +1,12 @@
+{
+  "operation": "crop_media",
+  "params": {
+    "input_path": "media/examples/video.mp4",
+    "output_path": "render/crop_example.mp4",
+    "left_px": 100,
+    "right_px": 100,
+    "preview_only": false,
+    "video_crf": 23,
+    "video_preset": "medium"
+  }
+}

@@ -85,6 +85,22 @@ def execute_step(
             **video_quality_kwargs,
         )
 
+    if operation == "crop_media":
+        preview_only = bool(params.get("preview_only", False))
+        if preview_only_override is not None:
+            preview_only = preview_only_override
+
+        return engine.crop_media(
+            input_path=params["input_path"],
+            output_path=params["output_path"],
+            left_px=int(params["left_px"]) if params.get("left_px") is not None else 0,
+            right_px=int(params["right_px"]) if params.get("right_px") is not None else 0,
+            top_px=int(params["top_px"]) if params.get("top_px") is not None else 0,
+            bottom_px=int(params["bottom_px"]) if params.get("bottom_px") is not None else 0,
+            preview_only=preview_only,
+            **video_quality_kwargs,
+        )
+
     if operation == "scale_media":
         preview_only = bool(params.get("preview_only", False))
         if preview_only_override is not None:

@@ -508,6 +508,139 @@ class MemeEngine:
             )
         return str(out_p)
 
+    def crop_media(
+        self,
+        input_path: str,
+        output_path: str,
+        left_px: int = 0,
+        right_px: int = 0,
+        top_px: int = 0,
+        bottom_px: int = 0,
+        preview_only: bool = False,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+    ) -> str:
+        in_p = self.resolve_path(input_path)
+        out_p = self.resolve_output_path(output_path)
+        media_is_video = self._is_video(in_p)
+
+        # Validate crop values and warn about negatives.
+        for name, val in [("left_px", left_px), ("right_px", right_px), ("top_px", top_px), ("bottom_px", bottom_px)]:
+            if val < 0:
+                self.logger.warning("crop_media %s is negative (%d); treated as 0", name, val)
+
+        left_px = max(0, int(left_px))
+        right_px = max(0, int(right_px))
+        top_px = max(0, int(top_px))
+        bottom_px = max(0, int(bottom_px))
+
+        if media_is_video:
+            return self._crop_video(
+                in_p, out_p, left_px, right_px, top_px, bottom_px,
+                preview_only=preview_only,
+                video_crf=video_crf,
+                video_preset=video_preset,
+                video_bitrate=video_bitrate,
+                audio_bitrate=audio_bitrate,
+            )
+        else:
+            return self._crop_image(
+                in_p, out_p, left_px, right_px, top_px, bottom_px,
+                preview_only=preview_only,
+            )
+
+    def _crop_image(self, in_p: Path, out_p: Path, left: int, right: int, top: int, bottom: int, preview_only: bool = False) -> str:
+        actual_out_p = out_p.with_suffix(".png") if preview_only else out_p
+        with Image.open(str(in_p)).convert("RGBA") as img:
+            w, h = img.size
+            crop_left = min(left, w)
+            crop_right = min(right, w - crop_left)
+            crop_top = min(top, h)
+            crop_bottom = min(bottom, h - crop_top)
+            if crop_left + crop_right >= w or crop_top + crop_bottom >= h:
+                raise ValueError(
+                    f"Crop removes entire image: source={w}x{h}, "
+                    f"left={crop_left} right={crop_right} top={crop_top} bottom={crop_bottom}"
+                )
+            cropped = img.crop((crop_left, crop_top, w - crop_right, h - crop_bottom))
+            self._save_image(cropped, actual_out_p)
+        self.logger.info(
+            "crop_media image input=%s source=%sx%s output=%sx%s left=%d right=%d top=%d bottom=%d",
+            in_p, w, h, cropped.width, cropped.height,
+            crop_left, crop_right, crop_top, crop_bottom,
+        )
+        return str(actual_out_p)
+
+    def _crop_video(
+        self,
+        in_p: Path,
+        out_p: Path,
+        left: int,
+        right: int,
+        top: int,
+        bottom: int,
+        preview_only: bool = False,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+    ) -> str:
+        if preview_only:
+            preview_path = out_p.with_suffix(".png")
+            with VideoFileClip(str(in_p)) as clip:
+                src_w = int(clip.w)
+                src_h = int(clip.h)
+                frame = clip.get_frame(0)
+                cropped_frame = frame[top:src_h - bottom, left:src_w - right]
+            Image.fromarray(cropped_frame).save(str(preview_path))
+            self.logger.info(
+                "crop_media video preview_only: saved frame at t=0 to %s source=%sx%s output=%sx%s",
+                preview_path, src_w, src_h,
+                src_w - left - right, src_h - top - bottom,
+            )
+            return str(preview_path)
+
+        with VideoFileClip(str(in_p)) as clip:
+            src_w = int(clip.w)
+            src_h = int(clip.h)
+            new_w = src_w - left - right
+            new_h = src_h - top - bottom
+            if new_w <= 0 or new_h <= 0:
+                raise ValueError(
+                    f"Crop removes entire video: source={src_w}x{src_h}, "
+                    f"left={left} right={right} top={top} bottom={bottom}"
+                )
+            # Ensure even dimensions for x264 compatibility.
+            if new_w % 2 != 0:
+                new_w -= 1
+            if new_h % 2 != 0:
+                new_h -= 1
+
+            from moviepy.video.VideoClip import VideoClip
+
+            def _crop_frame(t):
+                frame = clip.get_frame(t)
+                return frame[top:new_h + top, left:new_w + left]
+
+            cropped = VideoClip(frame_function=_crop_frame, duration=clip.duration, is_mask=clip.is_mask)
+            fps = float(getattr(clip, "fps", 24) or 24)
+            self._write_video(
+                cropped,
+                out_p,
+                fps=fps,
+                video_crf=video_crf,
+                video_preset=video_preset,
+                video_bitrate=video_bitrate,
+                audio_bitrate=audio_bitrate,
+            )
+        self.logger.info(
+            "crop_media video input=%s source=%sx%s output=%sx%s left=%d right=%d top=%d bottom=%d",
+            in_p, src_w, src_h, new_w, new_h, left, right, top, bottom,
+        )
+        return str(out_p)
+
     def stack_media(
         self,
         path1: str,
