@@ -57,7 +57,12 @@ class RichTextRenderer:
         try:
             return ImageFont.truetype(str(font_path), size)
         except OSError:
-            return ImageFont.load_default()
+            self.logger.warning(
+                "Failed to load font '%s' at size %s — falling back to Pillow default font.",
+                font_path,
+                size,
+            )
+            return ImageFont.load_default(size=size)
 
     def _split_words(self, text: str) -> List[str]:
         # [ \t]* on BOTH sides: optional leading whitespace (preserves inter-token boundary
