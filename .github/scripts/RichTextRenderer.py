@@ -365,10 +365,14 @@ class RichTextRenderer:
 
         total_text_height = 0
         for idx, line_h in enumerate(line_heights):
-            total_text_height += max(1, int(round(line_h * line_height)))
             if idx < len(lines) - 1:
+                # line_height scales the advance to the next line, not the ink height of the last line
+                total_text_height += max(1, int(round(line_h * line_height)))
                 gap = paragraph_spacing if line_break_after[idx] == "explicit" else line_spacing
                 total_text_height += gap
+            else:
+                # Last line: use full ink height — line_height only affects spacing between lines
+                total_text_height += line_h
 
         if vertical_align == "bottom":
             y = max(padding, container_height - padding - total_text_height)

@@ -263,6 +263,7 @@ class MemeEngine:
         max_long_side: Optional[int] = None,
         max_short_side: Optional[int] = None,
         upscale: bool = False,
+        preview_only: bool = False,
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
@@ -274,6 +275,26 @@ class MemeEngine:
         in_p = self.resolve_path(input_path)
         out_p = self.resolve_output_path(output_path)
         media_is_video = self._is_video(in_p)
+
+        if preview_only and media_is_video:
+            preview_path = out_p.with_suffix(".png")
+            with VideoFileClip(str(in_p)) as clip:
+                src_w = int(clip.w)
+                src_h = int(clip.h)
+                scale_factor = self._compute_scale_factor(
+                    src_w,
+                    src_h,
+                    max_long_side=max_long_side,
+                    max_short_side=max_short_side,
+                    upscale=upscale,
+                )
+                target_w = max(1, int(round(src_w * scale_factor)))
+                target_h = max(1, int(round(src_h * scale_factor)))
+                frame = clip.get_frame(0)
+            img = Image.fromarray(frame).resize((target_w, target_h), Image.Resampling.LANCZOS)
+            img.save(str(preview_path))
+            self.logger.info("scale_media preview_only: saved frame at %s", preview_path)
+            return str(preview_path)
 
         if media_is_video:
             with VideoFileClip(str(in_p)) as clip:
@@ -339,9 +360,10 @@ class MemeEngine:
                 else:
                     scaled_img = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
+                actual_out_p = out_p.with_suffix(".png") if preview_only else out_p
                 self._save_image(
                     scaled_img,
-                    out_p,
+                    actual_out_p,
                     image_quality=image_quality,
                     png_compress_level=png_compress_level,
                     optimize=optimize,
@@ -354,8 +376,10 @@ class MemeEngine:
                     src_h,
                     target_w,
                     target_h,
-                    out_p,
+                    actual_out_p,
                 )
+
+            return str(actual_out_p)
 
         return str(out_p)
 
