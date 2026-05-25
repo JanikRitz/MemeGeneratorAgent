@@ -45,6 +45,15 @@ def _replace_last_output(value: Any, last_output: str) -> Any:
         return {k: _replace_last_output(v, last_output) for k, v in value.items()}
     return value
 
+def _parse_time(value) -> float:
+    """Parse 'MM:SS' or 'HH:MM:SS' string to total seconds."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    parts = str(value).split(":")
+    if len(parts) == 2:
+        minutes, seconds = parts
+        return int(minutes) * 60 + float(seconds)
+    raise ValueError(f"Invalid time format: {value!r}, expected MM:SS or HH:MM:SS")
 
 def execute_step(
     engine: MemeEngine,
@@ -77,8 +86,8 @@ def execute_step(
 
         return engine.trim_video(
             input_path=params["input_path"],
-            start_sec=float(params["start_sec"]),
-            end_sec=float(params["end_sec"]),
+            start_sec=_parse_time(params["start_sec"]),
+            end_sec=_parse_time(params["end_sec"]),
             output_path=params["output_path"],
             boomerang=bool(params.get("boomerang", False)),
             preview_only=preview_only,
