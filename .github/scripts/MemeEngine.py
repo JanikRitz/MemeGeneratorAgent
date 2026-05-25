@@ -451,6 +451,7 @@ class MemeEngine:
         end_sec: float,
         output_path: str,
         preview_only: bool = False,
+        boomerang: bool = False,
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
@@ -458,7 +459,7 @@ class MemeEngine:
     ) -> str:
         in_p = self.resolve_path(input_path)
         out_p = self.resolve_output_path(output_path)
-        self.logger.info("trim_video input=%s start=%s end=%s output=%s", in_p, start_sec, end_sec, out_p)
+        self.logger.info("trim_video input=%s start=%s end=%s output=%s boomerang=%s", in_p, start_sec, end_sec, out_p, boomerang)
 
         if preview_only:
             preview_path = out_p.with_suffix(".png")
@@ -470,9 +471,34 @@ class MemeEngine:
 
         with VideoFileClip(str(in_p)) as clip:
             trimmed = clip.subclipped(start_sec, end_sec)
-            fps = float(getattr(clip, "fps", 24) or 24)
+            if boomerang:
+                # Create a seamless loop: forward clip + reversed clip.
+                # moviepy's `FlippedVideoClip` flips both spatially and temporally;
+                # we only want temporal reversal (play backwards), so use with_effects
+                # and a lambda that reverses the array along axis=0 (time).
+                from moviepy.video.VideoClip import VideoClip
+
+                def _reverse_frames(vid_clip):
+                    """Return a clip whose frames are played in reverse order."""
+                    fps = float(getattr(vid_clip, "fps", 24) or 24)
+                    duration = vid_clip.duration
+                    n_frames = int(fps * duration)
+
+                    def make_frame(t):
+                        # Map playback time t (0..duration) to frame index in reverse.
+                        idx = int((duration - t) * fps)
+                        idx = max(0, min(idx, n_frames - 1))
+                        return vid_clip.get_frame(float(idx) / fps)
+
+                    return VideoClip(frame_function=make_frame, duration=duration, is_mask=vid_clip.is_mask)
+
+                reversed_clip = _reverse_frames(trimmed)
+                final_clip = concatenate_videoclips([trimmed, reversed_clip])
+            else:
+                final_clip = trimmed
+            fps = float(getattr(final_clip, "fps", 24) or 24)
             self._write_video(
-                trimmed,
+                final_clip,
                 out_p,
                 fps=fps,
                 video_crf=video_crf,

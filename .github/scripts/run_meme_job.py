@@ -80,6 +80,7 @@ def execute_step(
             start_sec=float(params["start_sec"]),
             end_sec=float(params["end_sec"]),
             output_path=params["output_path"],
+            boomerang=bool(params.get("boomerang", False)),
             preview_only=preview_only,
             **video_quality_kwargs,
         )
