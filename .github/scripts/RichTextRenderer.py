@@ -41,6 +41,91 @@ class RichTextRenderer:
             if candidate.exists():
                 return candidate
 
+        # Fallback: resolve style variants by family + traits for fonts whose
+        # files are named with spaced style labels (e.g. "Montserrat Bold Italic").
+        style_tokens = {
+            "thin",
+            "extralight",
+            "light",
+            "regular",
+            "medium",
+            "semibold",
+            "semi",
+            "bold",
+            "extrabold",
+            "extra",
+            "black",
+            "italic",
+            "oblique",
+            "variablefont",
+            "wght",
+            "wdth",
+            "opsz",
+        }
+
+        def _tokenize(name: str) -> List[str]:
+            return [t for t in re.split(r"[\s_-]+", name.lower()) if t]
+
+        def _family_key(name: str) -> str:
+            tokens = _tokenize(name)
+            while tokens and tokens[-1] in style_tokens:
+                tokens.pop()
+            return "".join(tokens)
+
+        def _style_traits(name: str) -> Tuple[int, bool]:
+            normalized = " ".join(_tokenize(name))
+            is_italic = "italic" in normalized or "oblique" in normalized
+
+            if "black" in normalized:
+                weight = 900
+            elif "extra bold" in normalized or "extrabold" in normalized:
+                weight = 800
+            elif "semi bold" in normalized or "semibold" in normalized:
+                weight = 600
+            elif "bold" in normalized:
+                weight = 700
+            elif "medium" in normalized:
+                weight = 500
+            elif "extra light" in normalized or "extralight" in normalized:
+                weight = 200
+            elif "light" in normalized:
+                weight = 300
+            elif "thin" in normalized:
+                weight = 100
+            else:
+                weight = 400
+
+            return weight, is_italic
+
+        family_key = _family_key(stem)
+        if family_key:
+            target_weight = 700 if bold else 400
+            target_italic = bool(italic)
+            best_candidate: Path | None = None
+            best_score: int | None = None
+
+            for candidate_path in folder.iterdir():
+                if not candidate_path.is_file():
+                    continue
+                if candidate_path.suffix.lower() not in {".ttf", ".otf", ".ttc"}:
+                    continue
+                if _family_key(candidate_path.stem) != family_key:
+                    continue
+
+                cand_weight, cand_italic = _style_traits(candidate_path.stem)
+                score = abs(cand_weight - target_weight)
+                if cand_italic != target_italic:
+                    score += 500
+                if candidate_path.suffix.lower() != suffix.lower():
+                    score += 20
+
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_candidate = candidate_path
+
+            if best_candidate is not None:
+                return best_candidate
+
         # Also try inserting the style label before "-variablefont" in the stem.
         # This handles fonts like Montserrat whose italic variant is named
         # "Montserrat-Italic-VariableFont_wght.ttf" rather than appending a suffix.
