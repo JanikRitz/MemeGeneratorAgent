@@ -218,6 +218,36 @@ Notes:
 - `STASH_GRAPHQL_ENDPOINT` (or `STASH_URL`) must be set when a config contains any Stash reference.
 - `STASH_API_KEY` is optional and passed via both `ApiKey` and `Authorization: Bearer` headers.
 
+### 4) Hydrus references in JSON
+
+`run_meme_job.py` also resolves Hydrus references before running operations.
+
+Supported forms:
+- File path token by file ID: `"hydrus:file_id:<file_id>"`
+- File path token by hash: `"hydrus:hash:<sha256>"`
+- Object file path reference:
+  - `{ "$hydrus_file_path": { "file_id": 123 } }`
+  - `{ "$hydrus_file_path": { "hash": "<sha256>" } }`
+- Object search reference (returns one file path by index from tag search results):
+  - `{ "$hydrus_search_path": { "tags": ["series:foo", "character:bar"], "index": 0 } }`
+
+Example:
+
+```json
+{
+  "operation": "scale_media",
+  "params": {
+    "input_path": { "$hydrus_file_path": { "file_id": 123 } },
+    "output_path": "render/examples/hydrus_scaled.mp4",
+    "max_long_side": 1080
+  }
+}
+```
+
+Notes:
+- `HYDRUS_API_URL` (or `HYDRUS_URL`) is optional; default is `http://127.0.0.1:45869/`.
+- `HYDRUS_ACCESS_KEY` (or `HYDRUS_API_KEY`) is optional and depends on your Hydrus Client API permission setup.
+
 ## Supported Operations
 
 ### `trim_video`
@@ -367,6 +397,8 @@ Each overlay item can include:
 - Horizontal stack of video + image: `config/examples/video_image_stack_horizontal.json`
 - Simple video trim: `config/examples/video_trim.json`
 - Pipeline — Stash trim by marker then scale: `config/examples/pipeline_stash_trim_by_marker_scale.json`
+- Image with top text box sourced from Hydrus: `config/examples/image_top_text_box_hydrus.json`
+- Pipeline — Hydrus source, scale, then text overlays (GIF/video-safe MP4): `config/examples/pipeline_hydrus_scale_text_overlay.json`
 - Pipeline — video trim + scale + multi text overlay: `config/examples/pipeline_video_trim_scale_multi_overlay.json`
 - Pipeline — trim + scale + multi overlay, quality good: `config/examples/pipeline_video_trim_scale_multi_overlay_quality_good.json`
 - Pipeline — trim + scale + multi overlay, quality balanced: `config/examples/pipeline_video_trim_scale_multi_overlay_quality_balanced.json`

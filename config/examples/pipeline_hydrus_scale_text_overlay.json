@@ -1,0 +1,58 @@
+{
+  "pipeline": [
+    {
+      "operation": "scale_media",
+      "params": {
+        "input_path": { "$hydrus_file_path": { "file_id": 189566595 } },
+        "output_path": "render/examples/hydrus_scaled_640.mp4",
+        "max_long_side": 640,
+        "upscale": false,
+        "video_crf": 32,
+        "video_preset": "fast",
+        "video_bitrate": "900k",
+        "audio_bitrate": "64k"
+      }
+    },
+    {
+      "operation": "apply_multi_text_overlays",
+      "params": {
+        "base_media_path": "$last_output",
+        "output_path": "render/examples/hydrus_scale_text_overlay.mp4",
+        "video_crf": 32,
+        "video_preset": "fast",
+        "video_bitrate": "900k",
+        "audio_bitrate": "64k",
+        "overlays": [
+          {
+            "overlay_name": "hydrus_top",
+            "text": "**HYDRUS SCALE + OVERLAY**",
+            "start_time": 0.0,
+            "end_time": 6.0,
+            "match_base_size": true,
+            "text_align": "center",
+            "text_vertical_align": "top",
+            "text_padding": 10,
+            "font_size": 28,
+            "stroke_width": 3,
+            "stroke_fill": "#000000",
+            "shadow_enabled": true
+          },
+          {
+            "overlay_name": "hydrus_bottom",
+            "text": "[color=#7ad3ff]Works for GIFs and videos from Hydrus[/color]",
+            "start_time": 0.0,
+            "end_time": 6.0,
+            "match_base_size": true,
+            "text_align": "center",
+            "text_vertical_align": "bottom",
+            "text_padding": 10,
+            "font_size": 24,
+            "stroke_width": 3,
+            "stroke_fill": "#000000",
+            "shadow_enabled": true
+          }
+        ]
+      }
+    }
+  ]
+}

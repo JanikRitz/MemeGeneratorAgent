@@ -1,0 +1,20 @@
+{
+  "operation": "add_text_side_box",
+  "params": {
+    "base_media_path": { "$hydrus_file_path": { "file_id": 21602506 } },
+    "text_data": "[color=#000]Hydrus Source[/color]",
+    "side": "top",
+    "output_path": "render/examples/image_top_box_hydrus.png",
+    "output_duration_sec": 5.0,
+    "background_color": "#7ad3ff",
+    "text_align": "center",
+    "text_vertical_align": "center",
+    "text_padding": 16,
+    "font_size": 128,
+    "stroke_width": 0,
+    "stroke_fill": "#000000",
+    "shadow_enabled": false,
+    "auto_size": true,
+    "panel_png_name": "image_top_hydrus_panel"
+  }
+}

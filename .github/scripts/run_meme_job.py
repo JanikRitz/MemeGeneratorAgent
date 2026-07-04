@@ -13,6 +13,11 @@ try:
 except ImportError:
     from .stash_client import StashClient
 
+try:
+    from hydrus_client import HydrusClient
+except ImportError:
+    from .hydrus_client import HydrusClient
+
 
 def setup_logging(logs_dir: Path) -> logging.Logger:
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -289,6 +294,18 @@ def contains_stash_references(obj: Any) -> bool:
     return False
 
 
+def contains_hydrus_references(obj: Any) -> bool:
+    if isinstance(obj, dict):
+        if "$hydrus_file_path" in obj or "$hydrus_search_path" in obj:
+            return True
+        return any(contains_hydrus_references(value) for value in obj.values())
+    if isinstance(obj, list):
+        return any(contains_hydrus_references(item) for item in obj)
+    if isinstance(obj, str):
+        return obj.startswith("hydrus:file_id:") or obj.startswith("hydrus:hash:")
+    return False
+
+
 def _parse_stash_marker_token(token: str) -> Dict[str, Any]:
     # Format: stash:marker:<scene_id>:<marker_id_or_title>:<start|end>
     # Prefix a marker title with title= to disambiguate from numeric marker IDs.
@@ -361,6 +378,54 @@ def resolve_stash_references(obj: Any, stash: StashClient) -> Any:
     return obj
 
 
+def _coerce_hydrus_tags(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    return []
+
+
+def resolve_hydrus_references(obj: Any, hydrus: HydrusClient) -> Any:
+    if isinstance(obj, dict):
+        if "$hydrus_file_path" in obj:
+            spec = obj["$hydrus_file_path"]
+            if isinstance(spec, dict):
+                return hydrus.get_media_path(
+                    file_id=spec.get("file_id"),
+                    hash_=spec.get("hash"),
+                )
+            return hydrus.get_media_path(file_id=spec)
+
+        if "$hydrus_search_path" in obj:
+            spec = obj["$hydrus_search_path"]
+            if not isinstance(spec, dict):
+                raise ValueError("$hydrus_search_path must be an object")
+
+            return hydrus.search_file_path(
+                tags=_coerce_hydrus_tags(spec.get("tags")),
+                index=int(spec.get("index", 0)),
+                file_service_keys=spec.get("file_service_keys"),
+                tag_service_key=spec.get("tag_service_key"),
+            )
+
+        return {key: resolve_hydrus_references(value, hydrus) for key, value in obj.items()}
+
+    if isinstance(obj, list):
+        return [resolve_hydrus_references(item, hydrus) for item in obj]
+
+    if isinstance(obj, str):
+        if obj.startswith("hydrus:file_id:"):
+            file_id = obj[len("hydrus:file_id:") :]
+            return hydrus.get_media_path(file_id=file_id)
+
+        if obj.startswith("hydrus:hash:"):
+            hash_value = obj[len("hydrus:hash:") :]
+            return hydrus.get_media_path(hash_=hash_value)
+
+    return obj
+
+
 def maybe_resolve_stash_references(config: Dict[str, Any]) -> Dict[str, Any]:
     if not contains_stash_references(config):
         return config
@@ -374,6 +439,17 @@ def maybe_resolve_stash_references(config: Dict[str, Any]) -> Dict[str, Any]:
 
     stash = StashClient(endpoint=endpoint, api_key=api_key)
     return resolve_stash_references(config, stash)
+
+
+def maybe_resolve_hydrus_references(config: Dict[str, Any]) -> Dict[str, Any]:
+    if not contains_hydrus_references(config):
+        return config
+
+    endpoint = os.getenv("HYDRUS_API_URL") or os.getenv("HYDRUS_URL")
+    access_key = os.getenv("HYDRUS_ACCESS_KEY") or os.getenv("HYDRUS_API_KEY")
+
+    hydrus = HydrusClient(endpoint=endpoint, access_key=access_key)
+    return resolve_hydrus_references(config, hydrus)
 
 
 def get_output_path_from_config(cfg: Dict[str, Any]) -> Optional[Path]:
@@ -509,6 +585,7 @@ def main() -> None:
 
             config = rewrite_media_paths(config, project_root)
             config = maybe_resolve_stash_references(config)
+            config = maybe_resolve_hydrus_references(config)
             generated_files = collect_generated_file_paths(config) if args.release else set()
 
             output_path = get_output_path_from_config(config)
@@ -575,6 +652,7 @@ def main() -> None:
 
     config = rewrite_media_paths(config, project_root)
     config = maybe_resolve_stash_references(config)
+    config = maybe_resolve_hydrus_references(config)
     generated_files = collect_generated_file_paths(config) if args.release else set()
     output_path = get_output_path_from_config(config)
 
