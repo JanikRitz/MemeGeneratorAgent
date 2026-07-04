@@ -29,6 +29,19 @@ except ImportError:
     from .RichTextRenderer import RichTextRenderer
 
 class MemeEngine:
+    _MEDIA_SUFFIX_PRIORITY = {
+        ".gif": 0,
+        ".mp4": 1,
+        ".mov": 2,
+        ".mkv": 3,
+        ".webm": 4,
+        ".avi": 5,
+        ".png": 6,
+        ".jpg": 7,
+        ".jpeg": 8,
+        ".webp": 9,
+    }
+
     def __init__(self, base_dir: str = ".", logger: Optional[logging.Logger] = None):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -160,7 +173,63 @@ class MemeEngine:
         full_path = candidate if candidate.is_absolute() else self.base_dir / candidate
         if not full_path.exists():
             raise FileNotFoundError(f"Asset not found: {full_path}")
+        if full_path.is_dir():
+            return self._resolve_media_file_from_directory(full_path)
         return full_path
+
+    def _resolve_media_file_from_directory(self, directory: Path) -> Path:
+        """Resolve a directory-backed asset to the most likely media file inside it."""
+        # Prefer direct children first, then fall back to recursive search for
+        # Stash/library layouts that keep media in nested folders.
+        media_candidates = [
+            path for path in directory.iterdir()
+            if path.is_file() and path.suffix.lower() in self._MEDIA_SUFFIX_PRIORITY
+        ]
+
+        used_recursive_scan = False
+        if not media_candidates:
+            used_recursive_scan = True
+            media_candidates = [
+                path for path in directory.rglob("*")
+                if path.is_file() and path.suffix.lower() in self._MEDIA_SUFFIX_PRIORITY
+            ]
+
+        if not media_candidates:
+            raise FileNotFoundError(
+                f"Asset resolved to a directory with no supported media files: {directory}"
+            )
+
+        directory_name = directory.name.lower()
+
+        def sort_key(path: Path) -> Tuple[int, int, int, str]:
+            stem_matches_directory = 0 if path.stem.lower() == directory_name else 1
+            suffix_priority = self._MEDIA_SUFFIX_PRIORITY.get(path.suffix.lower(), 99)
+            relative_depth = len(path.relative_to(directory).parts)
+            return stem_matches_directory, suffix_priority, relative_depth, str(path).lower()
+
+        media_candidates.sort(key=sort_key)
+        chosen = media_candidates[0]
+
+        if used_recursive_scan:
+            self.logger.info(
+                "resolve_path directory=%s selected_media=%s candidate_count=%s via=recursive",
+                directory,
+                chosen,
+                len(media_candidates),
+            )
+            return chosen
+
+        if len(media_candidates) > 1:
+            self.logger.info(
+                "resolve_path directory=%s selected_media=%s candidate_count=%s",
+                directory,
+                chosen,
+                len(media_candidates),
+            )
+        else:
+            self.logger.info("resolve_path directory=%s selected_media=%s", directory, chosen)
+
+        return chosen
 
     def resolve_output_path(self, path_value: str) -> Path:
         candidate = Path(path_value)

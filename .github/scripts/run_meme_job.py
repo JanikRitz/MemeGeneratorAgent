@@ -115,8 +115,11 @@ def execute_step(
         if preview_only_override is not None:
             preview_only = preview_only_override
 
+        input_path = str(engine.resolve_path(params["input_path"]))
+        engine.logger.info("scale_media resolved input_path=%s", input_path)
+
         return engine.scale_media(
-            input_path=params["input_path"],
+            input_path=input_path,
             output_path=params["output_path"],
             max_long_side=int(params["max_long_side"]) if params.get("max_long_side") is not None else None,
             max_short_side=int(params["max_short_side"]) if params.get("max_short_side") is not None else None,

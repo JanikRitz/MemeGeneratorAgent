@@ -1,7 +1,53 @@
 import sys
+from pathlib import Path
 from typing import Any, List, Dict, Optional
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
+
+
+def _pick_preferred_file_path(files: List[Dict[str, Any]]) -> str:
+  """Choose the most likely original local media file from a Stash file list."""
+  if not files:
+    return ""
+
+  preferred_suffixes = {
+    ".gif": 0,
+    ".png": 1,
+    ".jpg": 2,
+    ".jpeg": 3,
+    ".webp": 4,
+    ".mp4": 10,
+    ".mov": 11,
+    ".mkv": 12,
+    ".webm": 13,
+    ".avi": 14,
+  }
+
+  def sort_key(entry: Dict[str, Any]) -> tuple[int, int, int, str]:
+    path_value = str(entry.get("path") or "")
+    path = Path(path_value)
+    suffix_rank = preferred_suffixes.get(path.suffix.lower(), 50)
+    size_value = entry.get("size")
+    size_rank = -int(size_value) if isinstance(size_value, (int, float)) else 0
+    depth_rank = len(path.parts)
+    return suffix_rank, size_rank, depth_rank, path_value.lower()
+
+  chosen = sorted(files, key=sort_key)[0]
+  return str(chosen.get("path") or "")
+
+
+def _normalize_visual_files(visual_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+  """Normalize Stash visual file unions into path-bearing file dicts."""
+  rows: List[Dict[str, Any]] = []
+  for entry in visual_files or []:
+    path_value = str(entry.get("path") or "")
+    if not path_value:
+      continue
+
+    normalized = dict(entry)
+    normalized["path"] = path_value
+    rows.append(normalized)
+  return rows
 
 class StashClient:
     def __init__(self, endpoint: str = "http://localhost:9999/graphql", api_key: Optional[str] = None):
@@ -40,8 +86,7 @@ class StashClient:
         result = self.client.execute(query, variable_values={"id": str(scene_id)})
         scene = result.get("findScene")
         if scene and scene.get("files"):
-            # Return the first available file path associated with the scene
-            return scene["files"][0]["path"]
+          return _pick_preferred_file_path(scene["files"])
         return ""
 
     def get_scene_markers(self, scene_id: Any) -> List[Dict[str, Any]]:
@@ -117,8 +162,24 @@ class StashClient:
             """
             query FindImagePath($id: ID!) {
               findImage(id: $id) {
-                files {
-                  path
+                visual_files {
+                  __typename
+                  ... on ImageFile {
+                    path
+                    size
+                    width
+                    height
+                  }
+                  ... on VideoFile {
+                    path
+                    size
+                    width
+                    height
+                    duration
+                    frame_rate
+                    video_codec
+                    audio_codec
+                  }
                 }
               }
             }
@@ -126,8 +187,9 @@ class StashClient:
         )
         result = self.client.execute(query, variable_values={"id": str(image_id)})
         image = result.get("findImage")
-        if image and image.get("files"):
-            return image["files"][0]["path"]
+        visual_files = _normalize_visual_files((image or {}).get("visual_files") or [])
+        if visual_files:
+          return _pick_preferred_file_path(visual_files)
         return ""
 
     def get_scene_bundle(self, scene_id: Any) -> Dict[str, Any]:
@@ -202,12 +264,31 @@ class StashClient:
                 rating100
                 date
                 organized
-                files {
-                  id
-                  path
-                  size
-                  width
-                  height
+                paths {
+                  thumbnail
+                  preview
+                  image
+                }
+                visual_files {
+                  __typename
+                  ... on ImageFile {
+                    id
+                    path
+                    size
+                    width
+                    height
+                  }
+                  ... on VideoFile {
+                    id
+                    path
+                    size
+                    width
+                    height
+                    duration
+                    frame_rate
+                    video_codec
+                    audio_codec
+                  }
                 }
                 performers {
                   id
@@ -226,7 +307,9 @@ class StashClient:
             """
         )
         result = self.client.execute(query, variable_values={"id": str(image_id)})
-        return result.get("findImage") or {}
+        image = result.get("findImage") or {}
+        image["files"] = _normalize_visual_files(image.get("visual_files") or [])
+        return image
 
     def get_performer_bundle(self, performer_id: Any) -> Dict[str, Any]:
         """

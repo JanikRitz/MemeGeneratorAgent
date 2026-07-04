@@ -28,6 +28,7 @@ def main() -> None:
 
     client = StashClient(endpoint=endpoint, api_key=api_key)
     payload = client.get_image_bundle(args.image_id)
+    payload["resolved_media_path"] = client.get_image_path(args.image_id)
     print(json.dumps(payload, indent=2))
 
 
