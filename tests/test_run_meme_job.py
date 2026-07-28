@@ -1,10 +1,13 @@
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
+import run_meme_job
 from artifact_cleanup import ArtifactCleanupService
 from config_preparation import ConfigPreparationService
 
@@ -41,3 +44,50 @@ class ArtifactCleanupServiceTests(unittest.TestCase):
             self.assertEqual(removed, 1)
             self.assertTrue(keep_file.exists())
             self.assertFalse(stale_file.exists())
+
+
+class RunMemeJobScriptTests(unittest.TestCase):
+    def test_main_passes_release_cleanup_hooks_to_runner(self):
+        class FakeJobExecutionService:
+            def __init__(self):
+                self.calls = []
+
+            def run_config_file(
+                self,
+                config_path,
+                config,
+                project_root,
+                args,
+                logger=None,
+                output_path_resolver=None,
+                generated_path_collector=None,
+            ):
+                self.calls.append(
+                    {
+                        "output_path_resolver": output_path_resolver,
+                        "generated_path_collector": generated_path_collector,
+                    }
+                )
+                return True
+
+        fake_service = FakeJobExecutionService()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            config_path = tmp_path / "config.json"
+            config_path.write_text(json.dumps({"params": {"output_path": str(tmp_path / "out.png")}}), encoding="utf-8")
+
+            with patch.object(run_meme_job, "JOB_EXECUTION_SERVICE", fake_service), patch.object(
+                run_meme_job,
+                "prepare_config_for_run",
+                return_value={"params": {"output_path": str(tmp_path / "out.png")}},
+            ), patch.object(run_meme_job, "load_config_file", return_value={"params": {"output_path": str(tmp_path / "out.png")}}), patch.object(
+                sys,
+                "argv",
+                ["run_meme_job.py", str(config_path), "--release"],
+            ):
+                run_meme_job.main()
+
+            self.assertEqual(len(fake_service.calls), 1)
+            self.assertIsNotNone(fake_service.calls[0]["output_path_resolver"])
+            self.assertIsNotNone(fake_service.calls[0]["generated_path_collector"])

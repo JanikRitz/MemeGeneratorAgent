@@ -242,7 +242,7 @@ def main() -> None:
                 print(f"Error preparing {cfg_file}: {exc}")
                 continue
 
-            JOB_EXECUTION_SERVICE.run_config_file(cfg_file, config, project_root, args)
+            run_config_file(cfg_file, config, project_root, args)
         return
 
     try:
@@ -251,7 +251,7 @@ def main() -> None:
         print(f"Error preparing {config_path}: {exc}")
         sys.exit(1)
 
-    success = JOB_EXECUTION_SERVICE.run_config_file(config_path, config, Path(config_path).resolve().parents[2], args)
+    success = run_config_file(config_path, config, Path(config_path).resolve().parents[2], args)
     if not success:
         sys.exit(1)
 

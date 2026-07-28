@@ -16,7 +16,7 @@ class StackMediaOperation(OperationHandler):
 
     def execute(self, engine: Any, params: Dict[str, Any], context: OperationContext) -> str:
         self.validate(params)
-        return engine.stack_media(
+        return engine._stack_media_impl(
             path1=params["path1"],
             path2=params["path2"],
             output_path=params["output_path"],
