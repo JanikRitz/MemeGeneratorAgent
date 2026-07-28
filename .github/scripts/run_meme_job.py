@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
@@ -373,6 +374,78 @@ def cleanup_files(paths: Set[Path], keep_path: Optional[Path] = None, logger: Op
     return removed
 
 
+def execute_config(
+    config: Dict[str, Any],
+    engine: MemeEngine,
+    args: argparse.Namespace,
+    logger: logging.Logger,
+) -> str:
+    if "pipeline" in config:
+        logger.info("Running pipeline with %s steps", len(config["pipeline"]))
+        last_output = ""
+        for index, step in enumerate(config["pipeline"]):
+            logger.info("Executing step %s: %s", index, step.get("operation"))
+            last_output = execute_step(
+                engine,
+                step,
+                last_output=last_output,
+                preview_only_override=(True if args.preview_only else None),
+                default_font_path=config.get("font_path"),
+            )
+            logger.info("Step %s output: %s", index, last_output)
+        return last_output
+
+    logger.info("Running single operation: %s", config.get("operation"))
+    output = execute_step(
+        engine,
+        config,
+        preview_only_override=(True if args.preview_only else None),
+        default_font_path=config.get("font_path"),
+    )
+    logger.info("Operation output: %s", output)
+    return output
+
+
+def run_config_file(
+    config_path: Path,
+    config: Dict[str, Any],
+    project_root: Path,
+    args: argparse.Namespace,
+    logger: Optional[logging.Logger] = None,
+) -> bool:
+    effective_logger = logger or setup_logging(project_root / "logs")
+    engine = MemeEngine(base_dir=str(project_root), logger=effective_logger)
+
+    generated_files = collect_generated_file_paths(config) if args.release else set()
+    output_path = get_output_path_from_config(config)
+
+    if output_path and output_path.exists() and output_path.stat().st_mtime > config_path.stat().st_mtime:
+        if args.release:
+            removed = cleanup_files(generated_files, keep_path=output_path, logger=effective_logger)
+            if removed:
+                print(f"Release cleanup for {config_path}: removed {removed} stale intermediates/previews")
+        print(f"Skipping {config_path} (output newer than config)")
+        return True
+
+    if args.release:
+        removed = cleanup_files(generated_files, keep_path=output_path, logger=effective_logger)
+        if removed:
+            print(f"Release pre-cleanup for {config_path}: removed {removed} stale intermediates/previews")
+
+    print(f"Running config: {config_path}")
+    try:
+        run_result = execute_config(config, engine, args, effective_logger)
+        if args.release and run_result:
+            removed = cleanup_files(generated_files, keep_path=Path(run_result), logger=effective_logger)
+            if removed:
+                print(f"Release post-cleanup for {config_path}: removed {removed} intermediate/preview files")
+        print(run_result)
+        return True
+    except Exception as exc:
+        print(f"Error running {config_path}: {exc}")
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run MemeEngine jobs from a JSON config file.")
     parser.add_argument("config_path", nargs="?", help="Path to JSON config (positional)")
@@ -401,129 +474,41 @@ def main() -> None:
             return
 
         project_root = config_path.resolve().parents[1]
-
         for cfg_file in config_files:
             with cfg_file.open("r", encoding="utf-8") as fh:
                 try:
                     config = json.load(fh)
-                except Exception as e:
-                    print(f"Failed to load {cfg_file}: {e}")
+                except Exception as exc:
+                    print(f"Failed to load {cfg_file}: {exc}")
                     continue
 
-            config = rewrite_media_paths(config, project_root)
-            config = maybe_resolve_stash_references(config)
-            config = maybe_resolve_hydrus_references(config)
-            generated_files = collect_generated_file_paths(config) if args.release else set()
-
-            output_path = get_output_path_from_config(config)
-            if output_path and output_path.exists():
-                if output_path.stat().st_mtime > cfg_file.stat().st_mtime:
-                    if args.release:
-                        removed = cleanup_files(generated_files, keep_path=output_path)
-                        if removed:
-                            print(f"Release cleanup for {cfg_file}: removed {removed} stale intermediates/previews")
-                    print(f"Skipping {cfg_file} (output newer than config)")
-                    continue
-
-            logger = setup_logging(project_root / "logs")
-            engine = MemeEngine(base_dir=str(project_root), logger=logger)
-
-            if args.release:
-                # Keep an existing final artifact until a new run succeeds.
-                removed = cleanup_files(generated_files, keep_path=output_path, logger=logger)
-                if removed:
-                    print(f"Release pre-cleanup for {cfg_file}: removed {removed} stale intermediates/previews")
-
-            print(f"Running config: {cfg_file}")
             try:
-                run_result = ""
-                if "pipeline" in config:
-                    logger.info("Running pipeline with %s steps", len(config["pipeline"]))
-                    last_output = ""
-                    for index, step in enumerate(config["pipeline"]):
-                        logger.info("Executing step %s: %s", index, step.get("operation"))
-                        last_output = execute_step(
-                            engine,
-                            step,
-                            last_output=last_output,
-                            preview_only_override=(True if args.preview_only else None),
-                            default_font_path=config.get("font_path"),
-                        )
-                        logger.info("Step %s output: %s", index, last_output)
-                    run_result = last_output
-                    print(run_result)
-                else:
-                    logger.info("Running single operation: %s", config.get("operation"))
-                    run_result = execute_step(
-                        engine,
-                        config,
-                        preview_only_override=(True if args.preview_only else None),
-                        default_font_path=config.get("font_path"),
-                    )
-                    logger.info("Operation output: %s", run_result)
-                    print(run_result)
+                config = rewrite_media_paths(config, project_root)
+                config = maybe_resolve_stash_references(config)
+                config = maybe_resolve_hydrus_references(config)
+            except Exception as exc:
+                print(f"Error preparing {cfg_file}: {exc}")
+                continue
 
-                if args.release and run_result:
-                    removed = cleanup_files(generated_files, keep_path=Path(run_result), logger=logger)
-                    if removed:
-                        print(f"Release post-cleanup for {cfg_file}: removed {removed} intermediate/preview files")
-            except Exception as e:
-                print(f"Error running {cfg_file}: {e}")
+            run_config_file(cfg_file, config, project_root, args)
         return
 
-    # Single file mode (original logic)
+    # Single file mode
     with config_path.open("r", encoding="utf-8") as fh:
         config = json.load(fh)
 
     project_root = Path(config_path).resolve().parents[2]
+    try:
+        config = rewrite_media_paths(config, project_root)
+        config = maybe_resolve_stash_references(config)
+        config = maybe_resolve_hydrus_references(config)
+    except Exception as exc:
+        print(f"Error preparing {config_path}: {exc}")
+        sys.exit(1)
 
-    config = rewrite_media_paths(config, project_root)
-    config = maybe_resolve_stash_references(config)
-    config = maybe_resolve_hydrus_references(config)
-    generated_files = collect_generated_file_paths(config) if args.release else set()
-    output_path = get_output_path_from_config(config)
-
-    logger = setup_logging(project_root / "logs")
-    engine = MemeEngine(base_dir=str(project_root), logger=logger)
-
-    if args.release:
-        removed = cleanup_files(generated_files, keep_path=output_path, logger=logger)
-        if removed:
-            print(f"Release pre-cleanup: removed {removed} stale intermediates/previews")
-
-    if "pipeline" in config:
-        logger.info("Running pipeline with %s steps", len(config["pipeline"]))
-        last_output = ""
-        for index, step in enumerate(config["pipeline"]):
-            logger.info("Executing step %s: %s", index, step.get("operation"))
-            last_output = execute_step(
-                engine,
-                step,
-                last_output=last_output,
-                preview_only_override=(True if args.preview_only else None),
-                default_font_path=config.get("font_path"),
-            )
-            logger.info("Step %s output: %s", index, last_output)
-        if args.release and last_output:
-            removed = cleanup_files(generated_files, keep_path=Path(last_output), logger=logger)
-            if removed:
-                print(f"Release post-cleanup: removed {removed} intermediate/preview files")
-        print(last_output)
-        return
-
-    logger.info("Running single operation: %s", config.get("operation"))
-    output = execute_step(
-        engine,
-        config,
-        preview_only_override=(True if args.preview_only else None),
-        default_font_path=config.get("font_path"),
-    )
-    logger.info("Operation output: %s", output)
-    if args.release and output:
-        removed = cleanup_files(generated_files, keep_path=Path(output), logger=logger)
-        if removed:
-            print(f"Release post-cleanup: removed {removed} intermediate/preview files")
-    print(output)
+    success = run_config_file(config_path, config, project_root, args)
+    if not success:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
