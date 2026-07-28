@@ -1,29 +1,32 @@
+from __future__ import annotations
+
 import argparse
 import json
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
-from MemeEngine import MemeEngine
-
-from operations.base import OperationContext
-from operations.registry import build_default_registry
+try:
+    from config_preparation import ConfigPreparationService
+except ImportError:
+    from .config_preparation import ConfigPreparationService
 
 try:
-    from stash_client import StashClient
+    from artifact_cleanup import ArtifactCleanupService
 except ImportError:
-    from .stash_client import StashClient
+    from .artifact_cleanup import ArtifactCleanupService
 
 try:
-    from hydrus_client import HydrusClient
+    from job_execution import JobExecutionService
 except ImportError:
-    from .hydrus_client import HydrusClient
+    from .job_execution import JobExecutionService
 
 
-REGISTRY = build_default_registry()
+CONFIG_PREPARATION_SERVICE = ConfigPreparationService()
+ARTIFACT_CLEANUP_SERVICE = ArtifactCleanupService()
+JOB_EXECUTION_SERVICE = JobExecutionService(cleanup_service=ARTIFACT_CLEANUP_SERVICE)
 
 
 def setup_logging(logs_dir: Path) -> logging.Logger:
@@ -48,236 +51,24 @@ def setup_logging(logs_dir: Path) -> logging.Logger:
     return logger
 
 
-def _replace_last_output(value: Any, last_output: str) -> Any:
-    if isinstance(value, str):
-        return last_output if value == "$last_output" else value
-    if isinstance(value, list):
-        return [_replace_last_output(item, last_output) for item in value]
-    if isinstance(value, dict):
-        return {k: _replace_last_output(v, last_output) for k, v in value.items()}
-    return value
-
-def _parse_time(value) -> float:
-    """Parse 'MM:SS' or 'HH:MM:SS' string to total seconds."""
-    if isinstance(value, (int, float)):
-        return float(value)
-    parts = str(value).split(":")
-    if len(parts) == 2:
-        minutes, seconds = parts
-        return int(minutes) * 60 + float(seconds)
-    raise ValueError(f"Invalid time format: {value!r}, expected MM:SS or HH:MM:SS")
-
-def execute_step(
-    engine: MemeEngine,
-    step: Dict[str, Any],
-    last_output: str = "",
-    preview_only_override: Optional[bool] = None,
-    default_font_path: Optional[str] = None,
-) -> str:
-    operation = step.get("operation")
-    params = step.get("params", {})
-    if last_output:
-        params = _replace_last_output(params, last_output)
-
-    if not operation:
-        raise ValueError("Each step must define an operation")
-
-    context = OperationContext(
-        engine=engine,
-        logger=engine.logger,
-        preview_only_override=preview_only_override,
-        default_font_path=default_font_path,
-        last_output=last_output,
-    )
-
-    handler = REGISTRY.get(operation)
-    if handler is None:
-        raise ValueError(f"Unsupported operation: {operation}")
-
-    return handler.execute(engine, params, context)
-
-
 def rewrite_media_paths(obj: Any, project_root: Path) -> Any:
-    if isinstance(obj, dict):
-        return {k: rewrite_media_paths(v, project_root) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [rewrite_media_paths(item, project_root) for item in obj]
-    if isinstance(obj, str):
-        for prefix in ("media/", "render/", "logs/", "config/"):
-            if obj.startswith(prefix):
-                return str(project_root / obj)
-        return obj
-    return obj
+    return CONFIG_PREPARATION_SERVICE.rewrite_media_paths(obj, project_root)
 
 
 def contains_stash_references(obj: Any) -> bool:
-    if isinstance(obj, dict):
-        if "$stash_scene_path" in obj or "$stash_marker_time" in obj or "$stash_image_path" in obj:
-            return True
-        return any(contains_stash_references(value) for value in obj.values())
-    if isinstance(obj, list):
-        return any(contains_stash_references(item) for item in obj)
-    if isinstance(obj, str):
-        return obj.startswith("stash:scene:") or obj.startswith("stash:marker:") or obj.startswith("stash:image:")
-    return False
+    return CONFIG_PREPARATION_SERVICE.contains_stash_references(obj)
 
 
 def contains_hydrus_references(obj: Any) -> bool:
-    if isinstance(obj, dict):
-        if "$hydrus_file_path" in obj or "$hydrus_search_path" in obj:
-            return True
-        return any(contains_hydrus_references(value) for value in obj.values())
-    if isinstance(obj, list):
-        return any(contains_hydrus_references(item) for item in obj)
-    if isinstance(obj, str):
-        return obj.startswith("hydrus:file_id:") or obj.startswith("hydrus:hash:")
-    return False
-
-
-def _parse_stash_marker_token(token: str) -> Dict[str, Any]:
-    # Format: stash:marker:<scene_id>:<marker_id_or_title>:<start|end>
-    # Prefix a marker title with title= to disambiguate from numeric marker IDs.
-    parts = token.split(":", 5)
-    if len(parts) != 5:
-        raise ValueError(
-            "Invalid stash marker token. Expected stash:marker:<scene_id>:<marker_id_or_title>:<start|end>"
-        )
-
-    scene_id = parts[2]
-    marker_ref = parts[3]
-    time_value = parts[4]
-
-    spec: Dict[str, Any] = {
-        "scene_id": scene_id,
-        "time": time_value,
-    }
-    if marker_ref.startswith("title="):
-        spec["marker_title"] = marker_ref[len("title=") :]
-    else:
-        spec["marker_id"] = marker_ref
-    return spec
-
-
-def resolve_stash_references(obj: Any, stash: StashClient) -> Any:
-    if isinstance(obj, dict):
-        if "$stash_scene_path" in obj:
-            return stash.get_scene_path(obj["$stash_scene_path"])
-
-        if "$stash_image_path" in obj:
-            return stash.get_image_path(obj["$stash_image_path"])
-
-        if "$stash_marker_time" in obj:
-            spec = obj["$stash_marker_time"]
-            if not isinstance(spec, dict):
-                raise ValueError("$stash_marker_time must be an object")
-
-            default_duration = spec.get("default_duration_sec")
-            return stash.resolve_marker_time(
-                scene_id=spec["scene_id"],
-                marker_id=spec.get("marker_id"),
-                marker_title=spec.get("marker_title"),
-                time_value=str(spec.get("time", "start")),
-                default_duration_sec=float(default_duration) if default_duration is not None else None,
-            )
-
-        return {key: resolve_stash_references(value, stash) for key, value in obj.items()}
-
-    if isinstance(obj, list):
-        return [resolve_stash_references(item, stash) for item in obj]
-
-    if isinstance(obj, str):
-        if obj.startswith("stash:scene:"):
-            scene_id = obj[len("stash:scene:") :]
-            return stash.get_scene_path(scene_id)
-
-        if obj.startswith("stash:image:"):
-            image_id = obj[len("stash:image:") :]
-            return stash.get_image_path(image_id)
-
-        if obj.startswith("stash:marker:"):
-            spec = _parse_stash_marker_token(obj)
-            return stash.resolve_marker_time(
-                scene_id=spec["scene_id"],
-                marker_id=spec.get("marker_id"),
-                marker_title=spec.get("marker_title"),
-                time_value=str(spec.get("time", "start")),
-            )
-
-    return obj
-
-
-def _coerce_hydrus_tags(value: Any) -> list[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if isinstance(value, str):
-        return [part.strip() for part in value.split(",") if part.strip()]
-    return []
-
-
-def resolve_hydrus_references(obj: Any, hydrus: HydrusClient) -> Any:
-    if isinstance(obj, dict):
-        if "$hydrus_file_path" in obj:
-            spec = obj["$hydrus_file_path"]
-            if isinstance(spec, dict):
-                return hydrus.get_media_path(
-                    file_id=spec.get("file_id"),
-                    hash_=spec.get("hash"),
-                )
-            return hydrus.get_media_path(file_id=spec)
-
-        if "$hydrus_search_path" in obj:
-            spec = obj["$hydrus_search_path"]
-            if not isinstance(spec, dict):
-                raise ValueError("$hydrus_search_path must be an object")
-
-            return hydrus.search_file_path(
-                tags=_coerce_hydrus_tags(spec.get("tags")),
-                index=int(spec.get("index", 0)),
-                file_service_keys=spec.get("file_service_keys"),
-                tag_service_key=spec.get("tag_service_key"),
-            )
-
-        return {key: resolve_hydrus_references(value, hydrus) for key, value in obj.items()}
-
-    if isinstance(obj, list):
-        return [resolve_hydrus_references(item, hydrus) for item in obj]
-
-    if isinstance(obj, str):
-        if obj.startswith("hydrus:file_id:"):
-            file_id = obj[len("hydrus:file_id:") :]
-            return hydrus.get_media_path(file_id=file_id)
-
-        if obj.startswith("hydrus:hash:"):
-            hash_value = obj[len("hydrus:hash:") :]
-            return hydrus.get_media_path(hash_=hash_value)
-
-    return obj
+    return CONFIG_PREPARATION_SERVICE.contains_hydrus_references(obj)
 
 
 def maybe_resolve_stash_references(config: Dict[str, Any]) -> Dict[str, Any]:
-    if not contains_stash_references(config):
-        return config
-
-    endpoint = os.getenv("STASH_GRAPHQL_ENDPOINT") or os.getenv("STASH_URL")
-    api_key = os.getenv("STASH_API_KEY")
-    if not endpoint:
-        raise ValueError(
-            "Config contains Stash references but STASH_GRAPHQL_ENDPOINT (or STASH_URL) is not set"
-        )
-
-    stash = StashClient(endpoint=endpoint, api_key=api_key)
-    return resolve_stash_references(config, stash)
+    return CONFIG_PREPARATION_SERVICE.maybe_resolve_stash_references(config)
 
 
 def maybe_resolve_hydrus_references(config: Dict[str, Any]) -> Dict[str, Any]:
-    if not contains_hydrus_references(config):
-        return config
-
-    endpoint = os.getenv("HYDRUS_API_URL") or os.getenv("HYDRUS_URL")
-    access_key = os.getenv("HYDRUS_ACCESS_KEY") or os.getenv("HYDRUS_API_KEY")
-
-    hydrus = HydrusClient(endpoint=endpoint, access_key=access_key)
-    return resolve_hydrus_references(config, hydrus)
+    return CONFIG_PREPARATION_SERVICE.maybe_resolve_hydrus_references(config)
 
 
 def get_output_path_from_config(cfg: Dict[str, Any]) -> Optional[Path]:
@@ -309,7 +100,6 @@ def collect_generated_file_paths(cfg: Dict[str, Any]) -> Set[Path]:
         output_path = Path(output_raw) if isinstance(output_raw, str) else None
         if output_path is not None:
             paths.add(output_path)
-            # Preview outputs are written as output_path with a .png extension.
             paths.add(output_path.with_suffix(".png"))
 
         if operation == "apply_multi_text_overlays":
@@ -357,53 +147,32 @@ def collect_generated_file_paths(cfg: Dict[str, Any]) -> Set[Path]:
 
 
 def cleanup_files(paths: Set[Path], keep_path: Optional[Path] = None, logger: Optional[logging.Logger] = None) -> int:
-    removed = 0
-    keep_resolved = str(keep_path.resolve()) if keep_path is not None else None
+    return ARTIFACT_CLEANUP_SERVICE.cleanup_files(paths, keep_path=keep_path, logger=logger)
 
-    for path in sorted(paths, key=lambda p: str(p)):
-        try:
-            if keep_resolved is not None and str(path.resolve()) == keep_resolved:
-                continue
-            if path.exists() and path.is_file():
-                path.unlink()
-                removed += 1
-        except Exception as exc:
-            if logger:
-                logger.warning("cleanup failed for %s: %s", path, exc)
 
-    return removed
+def execute_step(
+    engine: Any,
+    step: Dict[str, Any],
+    last_output: str = "",
+    preview_only_override: Optional[bool] = None,
+    default_font_path: Optional[str] = None,
+) -> str:
+    return JOB_EXECUTION_SERVICE.execute_step(
+        engine,
+        step,
+        last_output=last_output,
+        preview_only_override=preview_only_override,
+        default_font_path=default_font_path,
+    )
 
 
 def execute_config(
     config: Dict[str, Any],
-    engine: MemeEngine,
+    engine: Any,
     args: argparse.Namespace,
     logger: logging.Logger,
 ) -> str:
-    if "pipeline" in config:
-        logger.info("Running pipeline with %s steps", len(config["pipeline"]))
-        last_output = ""
-        for index, step in enumerate(config["pipeline"]):
-            logger.info("Executing step %s: %s", index, step.get("operation"))
-            last_output = execute_step(
-                engine,
-                step,
-                last_output=last_output,
-                preview_only_override=(True if args.preview_only else None),
-                default_font_path=config.get("font_path"),
-            )
-            logger.info("Step %s output: %s", index, last_output)
-        return last_output
-
-    logger.info("Running single operation: %s", config.get("operation"))
-    output = execute_step(
-        engine,
-        config,
-        preview_only_override=(True if args.preview_only else None),
-        default_font_path=config.get("font_path"),
-    )
-    logger.info("Operation output: %s", output)
-    return output
+    return JOB_EXECUTION_SERVICE.execute_config(config, engine, args, logger)
 
 
 def run_config_file(
@@ -413,40 +182,18 @@ def run_config_file(
     args: argparse.Namespace,
     logger: Optional[logging.Logger] = None,
 ) -> bool:
-    effective_logger = logger or setup_logging(project_root / "logs")
-    engine = MemeEngine(base_dir=str(project_root), logger=effective_logger)
-
-    generated_files = collect_generated_file_paths(config) if args.release else set()
-    output_path = get_output_path_from_config(config)
-
-    if output_path and output_path.exists() and output_path.stat().st_mtime > config_path.stat().st_mtime:
-        if args.release:
-            removed = cleanup_files(generated_files, keep_path=output_path, logger=effective_logger)
-            if removed:
-                print(f"Release cleanup for {config_path}: removed {removed} stale intermediates/previews")
-        print(f"Skipping {config_path} (output newer than config)")
-        return True
-
-    if args.release:
-        removed = cleanup_files(generated_files, keep_path=output_path, logger=effective_logger)
-        if removed:
-            print(f"Release pre-cleanup for {config_path}: removed {removed} stale intermediates/previews")
-
-    print(f"Running config: {config_path}")
-    try:
-        run_result = execute_config(config, engine, args, effective_logger)
-        if args.release and run_result:
-            removed = cleanup_files(generated_files, keep_path=Path(run_result), logger=effective_logger)
-            if removed:
-                print(f"Release post-cleanup for {config_path}: removed {removed} intermediate/preview files")
-        print(run_result)
-        return True
-    except Exception as exc:
-        print(f"Error running {config_path}: {exc}")
-        return False
+    return JOB_EXECUTION_SERVICE.run_config_file(
+        config_path,
+        config,
+        project_root,
+        args,
+        logger=logger,
+        output_path_resolver=lambda cfg: get_output_path_from_config(cfg),
+        generated_path_collector=lambda cfg: collect_generated_file_paths(cfg),
+    )
 
 
-def main() -> None:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run MemeEngine jobs from a JSON config file.")
     parser.add_argument("config_path", nargs="?", help="Path to JSON config (positional)")
     parser.add_argument("--config", help="Path to JSON config")
@@ -460,6 +207,20 @@ def main() -> None:
         action="store_true",
         help="Release mode: clean old intermediate/preview files and keep only the final output artifact",
     )
+    return parser
+
+
+def load_config_file(config_path: Path) -> Dict[str, Any]:
+    with config_path.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def prepare_config_for_run(config_path: Path, config: Dict[str, Any], project_root: Path) -> Dict[str, Any]:
+    return CONFIG_PREPARATION_SERVICE.prepare_config(config, project_root)
+
+
+def main() -> None:
+    parser = build_arg_parser()
     args = parser.parse_args()
 
     config_arg = args.config or args.config_path
@@ -475,38 +236,22 @@ def main() -> None:
 
         project_root = config_path.resolve().parents[1]
         for cfg_file in config_files:
-            with cfg_file.open("r", encoding="utf-8") as fh:
-                try:
-                    config = json.load(fh)
-                except Exception as exc:
-                    print(f"Failed to load {cfg_file}: {exc}")
-                    continue
-
             try:
-                config = rewrite_media_paths(config, project_root)
-                config = maybe_resolve_stash_references(config)
-                config = maybe_resolve_hydrus_references(config)
+                config = prepare_config_for_run(cfg_file, load_config_file(cfg_file), project_root)
             except Exception as exc:
                 print(f"Error preparing {cfg_file}: {exc}")
                 continue
 
-            run_config_file(cfg_file, config, project_root, args)
+            JOB_EXECUTION_SERVICE.run_config_file(cfg_file, config, project_root, args)
         return
 
-    # Single file mode
-    with config_path.open("r", encoding="utf-8") as fh:
-        config = json.load(fh)
-
-    project_root = Path(config_path).resolve().parents[2]
     try:
-        config = rewrite_media_paths(config, project_root)
-        config = maybe_resolve_stash_references(config)
-        config = maybe_resolve_hydrus_references(config)
+        config = prepare_config_for_run(config_path, load_config_file(config_path), Path(config_path).resolve().parents[2])
     except Exception as exc:
         print(f"Error preparing {config_path}: {exc}")
         sys.exit(1)
 
-    success = run_config_file(config_path, config, project_root, args)
+    success = JOB_EXECUTION_SERVICE.run_config_file(config_path, config, Path(config_path).resolve().parents[2], args)
     if not success:
         sys.exit(1)
 
