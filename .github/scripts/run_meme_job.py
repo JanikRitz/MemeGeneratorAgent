@@ -8,6 +8,9 @@ from typing import Any, Dict, Optional, Set
 
 from MemeEngine import MemeEngine
 
+from operations.base import OperationContext
+from operations.registry import build_default_registry
+
 try:
     from stash_client import StashClient
 except ImportError:
@@ -17,6 +20,9 @@ try:
     from hydrus_client import HydrusClient
 except ImportError:
     from .hydrus_client import HydrusClient
+
+
+REGISTRY = build_default_registry()
 
 
 def setup_logging(logs_dir: Path) -> logging.Logger:
@@ -72,201 +78,22 @@ def execute_step(
     if last_output:
         params = _replace_last_output(params, last_output)
 
-    video_quality_kwargs = {
-        "video_crf": int(params["video_crf"]) if params.get("video_crf") is not None else None,
-        "video_preset": params.get("video_preset"),
-        "video_bitrate": params.get("video_bitrate"),
-        "audio_bitrate": params.get("audio_bitrate"),
-    }
-    image_quality_kwargs = {
-        "image_quality": int(params["image_quality"]) if params.get("image_quality") is not None else None,
-        "png_compress_level": int(params["png_compress_level"]) if params.get("png_compress_level") is not None else None,
-        "optimize": bool(params["optimize"]) if params.get("optimize") is not None else None,
-    }
+    if not operation:
+        raise ValueError("Each step must define an operation")
 
-    if operation == "trim_video":
-        preview_only = bool(params.get("preview_only", False))
-        if preview_only_override is not None:
-            preview_only = preview_only_override
+    context = OperationContext(
+        engine=engine,
+        logger=engine.logger,
+        preview_only_override=preview_only_override,
+        default_font_path=default_font_path,
+        last_output=last_output,
+    )
 
-        return engine.trim_video(
-            input_path=params["input_path"],
-            start_sec=_parse_time(params["start_sec"]),
-            end_sec=_parse_time(params["end_sec"]),
-            output_path=params["output_path"],
-            boomerang=bool(params.get("boomerang", False)),
-            preview_only=preview_only,
-            **video_quality_kwargs,
-        )
+    handler = REGISTRY.get(operation)
+    if handler is None:
+        raise ValueError(f"Unsupported operation: {operation}")
 
-    if operation == "crop_media":
-        preview_only = bool(params.get("preview_only", False))
-        if preview_only_override is not None:
-            preview_only = preview_only_override
-
-        return engine.crop_media(
-            input_path=params["input_path"],
-            output_path=params["output_path"],
-            left_px=int(params["left_px"]) if params.get("left_px") is not None else 0,
-            right_px=int(params["right_px"]) if params.get("right_px") is not None else 0,
-            top_px=int(params["top_px"]) if params.get("top_px") is not None else 0,
-            bottom_px=int(params["bottom_px"]) if params.get("bottom_px") is not None else 0,
-            preview_only=preview_only,
-            **video_quality_kwargs,
-        )
-
-    if operation == "scale_media":
-        preview_only = bool(params.get("preview_only", False))
-        if preview_only_override is not None:
-            preview_only = preview_only_override
-
-        input_path = str(engine.resolve_path(params["input_path"]))
-        engine.logger.info("scale_media resolved input_path=%s", input_path)
-
-        return engine.scale_media(
-            input_path=input_path,
-            output_path=params["output_path"],
-            max_long_side=int(params["max_long_side"]) if params.get("max_long_side") is not None else None,
-            max_short_side=int(params["max_short_side"]) if params.get("max_short_side") is not None else None,
-            upscale=bool(params.get("upscale", False)),
-            preview_only=preview_only,
-            **video_quality_kwargs,
-            **image_quality_kwargs,
-        )
-
-    if operation == "stack_media":
-        return engine.stack_media(
-            path1=params["path1"],
-            path2=params["path2"],
-            output_path=params["output_path"],
-            orientation=params.get("orientation", "horizontal"),
-            duration_sec=float(params.get("duration_sec", 3.0)),
-            **video_quality_kwargs,
-        )
-
-    if operation == "concatenate_clips":
-        preview_only = bool(params.get("preview_only", False))
-        if preview_only_override is not None:
-            preview_only = preview_only_override
-
-        return engine.concatenate_clips(
-            clip_paths=params["clip_paths"],
-            output_path=params["output_path"],
-            preview_only=preview_only,
-            **video_quality_kwargs,
-        )
-
-    if operation == "generate_text_overlay":
-        return engine.generate_text_overlay(
-            text_data=params["text_data"],
-            video_width=int(params["video_width"]) if params.get("video_width") is not None else None,
-            video_height=int(params["video_height"]) if params.get("video_height") is not None else None,
-            output_path=params["output_path"],
-            media_path=params.get("media_path"),
-            horizontal_align=params.get("horizontal_align", "center"),
-            vertical_align=params.get("vertical_align", "center"),
-            padding=int(params.get("padding", 6)),
-            stroke_width=int(params.get("stroke_width", 3)),
-            stroke_fill=params.get("stroke_fill", "#000000"),
-            shadow_enabled=bool(params.get("shadow_enabled", True)),
-            font_size=int(params["font_size"]) if params.get("font_size") is not None else None,
-            background_color=params.get("background_color", "transparent"),
-            line_height=float(params.get("line_height", 1.0)),
-            paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
-            paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
-            compose_on_media=bool(params.get("compose_on_media", False)),
-            font_path=params.get("font_path") or default_font_path,
-            **image_quality_kwargs,
-        )
-
-    if operation == "apply_text_overlay":
-        preview_only = bool(params.get("preview_only", False))
-        if preview_only_override is not None:
-            preview_only = preview_only_override
-
-        overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
-        return engine.apply_text_overlay(
-            input_path=params["input_path"],
-            output_path=params["output_path"],
-            text=params.get("text"),
-            text_structured=params.get("text_structured"),
-            overlay_dir=overlay_dir,
-            start_time=float(params.get("start_time", 0.0)),
-            end_time=float(params["end_time"]) if params.get("end_time") is not None else None,
-            position=params.get("position", ["center", "top"]),
-            width=int(params["width"]) if params.get("width") is not None else None,
-            height=int(params["height"]) if params.get("height") is not None else None,
-            match_base_size=bool(params.get("match_base_size", True)),
-            text_align=params.get("text_align", "center"),
-            text_vertical_align=params.get("text_vertical_align", "center"),
-            text_padding=int(params.get("text_padding", 6)),
-            font_size=int(params["font_size"]) if params.get("font_size") is not None else None,
-            font_path=params.get("font_path") or default_font_path,
-            stroke_width=int(params.get("stroke_width", 3)),
-            stroke_fill=params.get("stroke_fill", "#000000"),
-            shadow_enabled=bool(params.get("shadow_enabled", True)),
-            background_color=params.get("background_color", "transparent"),
-            line_height=float(params.get("line_height", 1.0)),
-            paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
-            paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
-            overlay_name=params.get("overlay_name"),
-            output_duration_sec=float(params["output_duration_sec"]) if params.get("output_duration_sec") is not None else None,
-            preview_only=preview_only,
-            **video_quality_kwargs,
-        )
-
-    if operation == "add_text_side_box":
-        preview_only = bool(params.get("preview_only", False))
-        if preview_only_override is not None:
-            preview_only = preview_only_override
-
-        overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
-        return engine.add_text_side_box(
-            base_media_path=params["base_media_path"],
-            text_data=params["text_data"],
-            side=params["side"],
-            output_path=params["output_path"],
-            overlay_dir=overlay_dir,
-            box_size_px=int(params["box_size_px"]) if params.get("box_size_px") is not None else None,
-            box_size_ratio=float(params.get("box_size_ratio", 0.22)),
-            background_color=params.get("background_color", "#101010"),
-            text_align=params.get("text_align", "center"),
-            text_vertical_align=params.get("text_vertical_align", "center"),
-            text_padding=int(params.get("text_padding", 6)),
-            font_size=int(params["font_size"]) if params.get("font_size") is not None else None,
-            font_path=params.get("font_path") or default_font_path,
-            stroke_width=int(params.get("stroke_width", 3)),
-            stroke_fill=params.get("stroke_fill", "#000000"),
-            shadow_enabled=bool(params.get("shadow_enabled", True)),
-            output_duration_sec=float(params["output_duration_sec"]) if params.get("output_duration_sec") is not None else None,
-            panel_png_name=params.get("panel_png_name"),
-            preview_only=preview_only,
-            line_height=float(params.get("line_height", 1.0)),
-            paragraph_spacing=int(params["paragraph_spacing"]) if params.get("paragraph_spacing") is not None else None,
-            paragraph_indent_px=int(params.get("paragraph_indent_px", 0)),
-            auto_size=bool(params.get("auto_size", True)),
-            **video_quality_kwargs,
-            **image_quality_kwargs,
-        )
-
-    if operation == "apply_multi_text_overlays":
-        preview_only = bool(params.get("preview_only", False))
-        if preview_only_override is not None:
-            preview_only = preview_only_override
-
-        overlay_dir = params.get("overlay_dir") or str(Path(params["output_path"]).parent)
-        return engine.apply_multi_text_overlays(
-            base_media_path=params["base_media_path"],
-            overlays=params["overlays"],
-            output_path=params["output_path"],
-            overlay_dir=overlay_dir,
-            output_duration_sec=params.get("output_duration_sec"),
-            font_path=params.get("font_path") or default_font_path,
-            preview_only=preview_only,
-            **video_quality_kwargs,
-        )
-
-    raise ValueError(f"Unsupported operation: {operation}")
+    return handler.execute(engine, params, context)
 
 
 def rewrite_media_paths(obj: Any, project_root: Path) -> Any:
