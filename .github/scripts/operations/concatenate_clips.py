@@ -10,8 +10,10 @@ except ImportError:
     from moviepy import VideoFileClip, concatenate_videoclips
 
 from .base import OperationContext, OperationHandler
+from .registry import register_operation
 
 
+@register_operation
 class ConcatenateClipsOperation(OperationHandler):
     name = "concatenate_clips"
 

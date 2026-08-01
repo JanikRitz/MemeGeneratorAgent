@@ -5,7 +5,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
 from operations.base import OperationHandler
-from operations.registry import OperationRegistry, build_default_registry
+from operations.registry import (
+    OperationRegistry,
+    auto_discover_operations,
+    build_default_registry,
+    register_operation,
+)
 
 
 class DummyHandler(OperationHandler):
@@ -26,10 +31,35 @@ class OperationRegistryTests(unittest.TestCase):
         self.assertEqual(registry.get("dummy").name, "dummy")
         self.assertIn("dummy", registry.list())
 
+    def test_register_operation_decorator(self):
+        @register_operation
+        class DecoratedOp(OperationHandler):
+            name = "decorated_test_op"
+
+        registry = build_default_registry()
+        self.assertIsNotNone(registry.get("decorated_test_op"))
+
+    def test_register_operation_decorator_custom_name(self):
+        @register_operation("custom_op_name")
+        class CustomNamedOp(OperationHandler):
+            name = "original_name"
+
+        registry = build_default_registry()
+        self.assertIsNotNone(registry.get("custom_op_name"))
+
+    def test_registry_instance_decorator(self):
+        registry = OperationRegistry()
+
+        @registry.register
+        class InstanceDecoratedOp(OperationHandler):
+            name = "inst_dec_op"
+
+        self.assertIsNotNone(registry.get("inst_dec_op"))
+
     def test_default_registry_contains_core_operations(self):
         registry = build_default_registry()
 
-        for operation_name in [
+        expected_operations = [
             "trim_video",
             "crop_media",
             "scale_media",
@@ -39,7 +69,19 @@ class OperationRegistryTests(unittest.TestCase):
             "apply_text_overlay",
             "add_text_side_box",
             "apply_multi_text_overlays",
-        ]:
+            "resolve_path",
+            "resolve_output_path",
+            "get_media_info",
+            "write_video",
+            "save_image",
+            "compute_scale_factor",
+            "normalize_position",
+            "position_to_pixels",
+            "crop_media_impl",
+            "stack_media_impl",
+        ]
+
+        for operation_name in expected_operations:
             with self.subTest(operation_name=operation_name):
                 self.assertIsNotNone(registry.get(operation_name))
 

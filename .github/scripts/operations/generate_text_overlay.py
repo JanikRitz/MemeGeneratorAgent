@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from .base import OperationContext, OperationHandler
+from .registry import register_operation
 
 
+@register_operation
 class GenerateTextOverlayOperation(OperationHandler):
     name = "generate_text_overlay"
 

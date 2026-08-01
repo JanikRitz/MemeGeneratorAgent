@@ -239,7 +239,8 @@ def main() -> None:
             try:
                 config = prepare_config_for_run(cfg_file, load_config_file(cfg_file), project_root)
             except Exception as exc:
-                print(f"Error preparing {cfg_file}: {exc}")
+                err_msg = str(exc).strip() or repr(exc)
+                print(f"Error preparing {cfg_file}: {err_msg}")
                 continue
 
             run_config_file(cfg_file, config, project_root, args)
@@ -248,7 +249,8 @@ def main() -> None:
     try:
         config = prepare_config_for_run(config_path, load_config_file(config_path), Path(config_path).resolve().parents[2])
     except Exception as exc:
-        print(f"Error preparing {config_path}: {exc}")
+        err_msg = str(exc).strip() or repr(exc)
+        print(f"Error preparing {config_path}: {err_msg}")
         sys.exit(1)
 
     success = run_config_file(config_path, config, Path(config_path).resolve().parents[2], args)

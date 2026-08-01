@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .base import OperationContext, OperationHandler
+from .registry import register_operation
 
 
+@register_operation
 class ApplyTextOverlayOperation(OperationHandler):
     name = "apply_text_overlay"
 

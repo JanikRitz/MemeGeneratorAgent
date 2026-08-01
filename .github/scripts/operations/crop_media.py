@@ -10,8 +10,10 @@ except ImportError:
     from moviepy import VideoFileClip
 
 from .base import OperationContext, OperationHandler
+from .registry import register_operation
 
 
+@register_operation
 class CropMediaOperation(OperationHandler):
     name = "crop_media"
 

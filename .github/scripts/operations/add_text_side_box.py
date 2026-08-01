@@ -11,8 +11,10 @@ except ImportError:
     from moviepy import CompositeVideoClip, ImageClip, VideoFileClip
 
 from .base import OperationContext, OperationHandler
+from .registry import register_operation
 
 
+@register_operation
 class AddTextSideBoxOperation(OperationHandler):
     name = "add_text_side_box"
 

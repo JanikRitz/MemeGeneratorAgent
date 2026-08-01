@@ -8,28 +8,10 @@ from PIL import Image
 
 try:
     from operations.base import OperationContext
-    from operations.registry import OperationRegistry
-    from operations.trim_video import TrimVideoOperation
-    from operations.crop_media import CropMediaOperation
-    from operations.scale_media import ScaleMediaOperation
-    from operations.stack_media import StackMediaOperation
-    from operations.concatenate_clips import ConcatenateClipsOperation
-    from operations.generate_text_overlay import GenerateTextOverlayOperation
-    from operations.apply_text_overlay import ApplyTextOverlayOperation
-    from operations.add_text_side_box import AddTextSideBoxOperation
-    from operations.apply_multi_text_overlays import ApplyMultiTextOverlaysOperation
+    from operations.registry import OperationRegistry, build_default_registry
 except ImportError:
     from .operations.base import OperationContext
-    from .operations.registry import OperationRegistry
-    from .operations.trim_video import TrimVideoOperation
-    from .operations.crop_media import CropMediaOperation
-    from .operations.scale_media import ScaleMediaOperation
-    from .operations.stack_media import StackMediaOperation
-    from .operations.concatenate_clips import ConcatenateClipsOperation
-    from .operations.generate_text_overlay import GenerateTextOverlayOperation
-    from .operations.apply_text_overlay import ApplyTextOverlayOperation
-    from .operations.add_text_side_box import AddTextSideBoxOperation
-    from .operations.apply_multi_text_overlays import ApplyMultiTextOverlaysOperation
+    from .operations.registry import OperationRegistry, build_default_registry
 
 try:
     from moviepy.editor import (
@@ -80,17 +62,7 @@ class MemeEngine:
         self.registry = registry or self._build_default_registry()
 
     def _build_default_registry(self) -> OperationRegistry:
-        registry = OperationRegistry()
-        registry.register(TrimVideoOperation())
-        registry.register(CropMediaOperation())
-        registry.register(ScaleMediaOperation())
-        registry.register(StackMediaOperation())
-        registry.register(ConcatenateClipsOperation())
-        registry.register(GenerateTextOverlayOperation())
-        registry.register(ApplyTextOverlayOperation())
-        registry.register(AddTextSideBoxOperation())
-        registry.register(ApplyMultiTextOverlaysOperation())
-        return registry
+        return build_default_registry()
 
     def register_operation(self, handler) -> None:
         self.registry.register(handler)
@@ -207,6 +179,9 @@ class MemeEngine:
         return clip.set_audio(audio_clip)
 
     def get_media_info(self, input_path: str) -> Dict[str, Any]:
+        return self.execute("get_media_info", {"input_path": input_path})
+
+    def _get_media_info_impl(self, input_path: str) -> Dict[str, Any]:
         media_path = self.resolve_path(input_path)
         info: Dict[str, Any] = {
             "path": str(media_path),
@@ -233,6 +208,9 @@ class MemeEngine:
         return path.suffix.lower() in {".mp4", ".mov", ".avi", ".mkv", ".webm", ".gif"}
 
     def resolve_path(self, path_value: str) -> Path:
+        return self.execute("resolve_path", {"path_value": path_value})
+
+    def _resolve_path_impl(self, path_value: str) -> Path:
         candidate = Path(path_value)
         full_path = candidate if candidate.is_absolute() else self.base_dir / candidate
         if not full_path.exists():
@@ -296,17 +274,16 @@ class MemeEngine:
         return chosen
 
     def resolve_output_path(self, path_value: str) -> Path:
+        return self.execute("resolve_output_path", {"path_value": path_value})
+
+    def _resolve_output_path_impl(self, path_value: str) -> Path:
         candidate = Path(path_value)
         out_path = candidate if candidate.is_absolute() else self.base_dir / candidate
         out_path.parent.mkdir(parents=True, exist_ok=True)
         return out_path
 
     def _normalize_position(self, position: Any) -> Tuple[Any, Any]:
-        if isinstance(position, (list, tuple)) and len(position) == 2:
-            return position[0], position[1]
-        if isinstance(position, str):
-            return position, "center"
-        return "center", "center"
+        return self.execute("normalize_position", {"position": position})
 
     def _position_to_pixels(
         self,
@@ -316,41 +293,16 @@ class MemeEngine:
         overlay_w: int,
         overlay_h: int,
     ) -> Tuple[int, int]:
-        px, py = position
-        if isinstance(px, (int, float)):
-            x = int(px)
-        elif px == "center":
-            x = (base_w - overlay_w) // 2
-        elif px == "right":
-            x = base_w - overlay_w
-        else:  # "left" or unknown
-            x = 0
-        if isinstance(py, (int, float)):
-            y = int(py)
-        elif py == "center":
-            y = (base_h - overlay_h) // 2
-        elif py == "bottom":
-            y = base_h - overlay_h
-        else:  # "top" or unknown
-            y = 0
-        return x, y
-
-    def _build_ffmpeg_params(
-        self,
-        video_crf: Optional[int],
-        video_preset: Optional[str],
-    ) -> Optional[List[str]]:
-        ffmpeg_params: List[str] = []
-
-        if video_crf is not None:
-            if video_crf < 0 or video_crf > 51:
-                raise ValueError("video_crf must be between 0 and 51")
-            ffmpeg_params.extend(["-crf", str(int(video_crf))])
-
-        if video_preset is not None:
-            ffmpeg_params.extend(["-preset", str(video_preset)])
-
-        return ffmpeg_params or None
+        return self.execute(
+            "position_to_pixels",
+            {
+                "position": position,
+                "base_w": base_w,
+                "base_h": base_h,
+                "overlay_w": overlay_w,
+                "overlay_h": overlay_h,
+            },
+        )
 
     def _write_video(
         self,
@@ -364,22 +316,20 @@ class MemeEngine:
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
     ) -> None:
-        write_kwargs: Dict[str, Any] = {
-            "codec": video_codec,
-            "audio_codec": audio_codec,
-        }
-        if fps is not None:
-            write_kwargs["fps"] = fps
-        if video_bitrate:
-            write_kwargs["bitrate"] = str(video_bitrate)
-        if audio_bitrate:
-            write_kwargs["audio_bitrate"] = str(audio_bitrate)
-
-        ffmpeg_params = self._build_ffmpeg_params(video_crf=video_crf, video_preset=video_preset)
-        if ffmpeg_params:
-            write_kwargs["ffmpeg_params"] = ffmpeg_params
-
-        clip.write_videofile(str(output_path), **write_kwargs)
+        self.execute(
+            "write_video",
+            {
+                "clip": clip,
+                "output_path": output_path,
+                "fps": fps,
+                "video_codec": video_codec,
+                "audio_codec": audio_codec,
+                "video_crf": video_crf,
+                "video_preset": video_preset,
+                "video_bitrate": video_bitrate,
+                "audio_bitrate": audio_bitrate,
+            },
+        )
 
     def _save_image(
         self,
@@ -389,36 +339,16 @@ class MemeEngine:
         png_compress_level: Optional[int] = None,
         optimize: Optional[bool] = None,
     ) -> None:
-        suffix = output_path.suffix.lower()
-        save_kwargs: Dict[str, Any] = {}
-
-        if optimize is not None:
-            save_kwargs["optimize"] = bool(optimize)
-
-        if image_quality is not None:
-            if image_quality < 1 or image_quality > 100:
-                raise ValueError("image_quality must be between 1 and 100")
-
-        if png_compress_level is not None:
-            if png_compress_level < 0 or png_compress_level > 9:
-                raise ValueError("png_compress_level must be between 0 and 9")
-
-        if suffix in {".jpg", ".jpeg"}:
-            if image_quality is not None:
-                save_kwargs["quality"] = int(image_quality)
-            image.convert("RGB").save(str(output_path), **save_kwargs)
-            return
-
-        if suffix == ".webp":
-            if image_quality is not None:
-                save_kwargs["quality"] = int(image_quality)
-            image.save(str(output_path), **save_kwargs)
-            return
-
-        if suffix == ".png" and png_compress_level is not None:
-            save_kwargs["compress_level"] = int(png_compress_level)
-
-        image.save(str(output_path), **save_kwargs)
+        self.execute(
+            "save_image",
+            {
+                "image": image,
+                "output_path": output_path,
+                "image_quality": image_quality,
+                "png_compress_level": png_compress_level,
+                "optimize": optimize,
+            },
+        )
 
     def _compute_scale_factor(
         self,
@@ -428,27 +358,16 @@ class MemeEngine:
         max_short_side: Optional[int],
         upscale: bool,
     ) -> float:
-        factors: List[float] = []
-        long_side = max(width, height)
-        short_side = min(width, height)
-
-        if max_long_side is not None:
-            if max_long_side <= 0:
-                raise ValueError("max_long_side must be > 0")
-            factors.append(float(max_long_side) / float(long_side))
-
-        if max_short_side is not None:
-            if max_short_side <= 0:
-                raise ValueError("max_short_side must be > 0")
-            factors.append(float(max_short_side) / float(short_side))
-
-        if not factors:
-            raise ValueError("Provide at least one of: max_long_side, max_short_side")
-
-        scale_factor = min(factors)
-        if not upscale:
-            scale_factor = min(scale_factor, 1.0)
-        return scale_factor
+        return self.execute(
+            "compute_scale_factor",
+            {
+                "width": width,
+                "height": height,
+                "max_long_side": max_long_side,
+                "max_short_side": max_short_side,
+                "upscale": upscale,
+            },
+        )
 
     def _crop_media_impl(
         self,
@@ -464,34 +383,22 @@ class MemeEngine:
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
     ) -> str:
-        in_p = self.resolve_path(input_path)
-        out_p = self.resolve_output_path(output_path)
-        media_is_video = self._is_video(in_p)
-
-        # Validate crop values and warn about negatives.
-        for name, val in [("left_px", left_px), ("right_px", right_px), ("top_px", top_px), ("bottom_px", bottom_px)]:
-            if val < 0:
-                self.logger.warning("crop_media %s is negative (%d); treated as 0", name, val)
-
-        left_px = max(0, int(left_px))
-        right_px = max(0, int(right_px))
-        top_px = max(0, int(top_px))
-        bottom_px = max(0, int(bottom_px))
-
-        if media_is_video:
-            return self._crop_video(
-                in_p, out_p, left_px, right_px, top_px, bottom_px,
-                preview_only=preview_only,
-                video_crf=video_crf,
-                video_preset=video_preset,
-                video_bitrate=video_bitrate,
-                audio_bitrate=audio_bitrate,
-            )
-        else:
-            return self._crop_image(
-                in_p, out_p, left_px, right_px, top_px, bottom_px,
-                preview_only=preview_only,
-            )
+        return self.execute(
+            "crop_media_impl",
+            {
+                "input_path": input_path,
+                "output_path": output_path,
+                "left_px": left_px,
+                "right_px": right_px,
+                "top_px": top_px,
+                "bottom_px": bottom_px,
+                "preview_only": preview_only,
+                "video_crf": video_crf,
+                "video_preset": video_preset,
+                "video_bitrate": video_bitrate,
+                "audio_bitrate": audio_bitrate,
+            },
+        )
 
     def _stack_media_impl(
         self,
@@ -505,48 +412,20 @@ class MemeEngine:
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
     ) -> str:
-        p1 = self.resolve_path(path1)
-        p2 = self.resolve_path(path2)
-        out_p = self.resolve_output_path(output_path)
-        self.logger.info(
-            "stack_media path1=%s path2=%s output=%s orientation=%s",
-            p1,
-            p2,
-            out_p,
-            orientation,
+        return self.execute(
+            "stack_media_impl",
+            {
+                "path1": path1,
+                "path2": path2,
+                "output_path": output_path,
+                "orientation": orientation,
+                "duration_sec": duration_sec,
+                "video_crf": video_crf,
+                "video_preset": video_preset,
+                "video_bitrate": video_bitrate,
+                "audio_bitrate": audio_bitrate,
+            },
         )
-
-        clip1 = VideoFileClip(str(p1)) if self._is_video(p1) else ImageClip(str(p1)).with_duration(duration_sec)
-        clip2 = VideoFileClip(str(p2)) if self._is_video(p2) else ImageClip(str(p2)).with_duration(duration_sec)
-
-        if clip1.duration != clip2.duration:
-            duration = max(clip1.duration, clip2.duration)
-            clip1 = clip1.with_duration(duration)
-            clip2 = clip2.with_duration(duration)
-
-        if orientation == "horizontal":
-            target_h = int(min(clip1.h, clip2.h))
-            clip1 = clip1.resized(height=target_h)
-            clip2 = clip2.resized(height=target_h)
-            grid = [[clip1, clip2]]
-        else:
-            target_w = int(min(clip1.w, clip2.w))
-            clip1 = clip1.resized(width=target_w)
-            clip2 = clip2.resized(width=target_w)
-            grid = [[clip1], [clip2]]
-
-        final_clip = clips_array(grid)
-        fps = float(getattr(clip1, "fps", getattr(clip2, "fps", 24)) or 24)
-        self._write_video(
-            final_clip,
-            out_p,
-            fps=fps,
-            video_crf=video_crf,
-            video_preset=video_preset,
-            video_bitrate=video_bitrate,
-            audio_bitrate=audio_bitrate,
-        )
-        return str(out_p)
 
     def generate_text_overlay(
         self,

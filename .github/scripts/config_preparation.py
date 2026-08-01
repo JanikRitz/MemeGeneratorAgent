@@ -177,15 +177,28 @@ class ConfigPreparationService:
                 "Config contains Stash references but STASH_GRAPHQL_ENDPOINT (or STASH_URL) is not set"
             )
 
-        stash = StashClient(endpoint=endpoint, api_key=api_key)
-        return self.resolve_stash_references(config, stash)
+        try:
+            stash = StashClient(endpoint=endpoint, api_key=api_key)
+            return self.resolve_stash_references(config, stash)
+        except Exception as exc:
+            err_detail = str(exc).strip() or repr(exc)
+            raise ValueError(
+                f"Config contains Stash references but Stash API call failed: {err_detail}"
+            ) from exc
 
     def maybe_resolve_hydrus_references(self, config: Dict[str, Any]) -> Dict[str, Any]:
         if not self.contains_hydrus_references(config):
             return config
 
-        endpoint = os.getenv("HYDRUS_API_URL") or os.getenv("HYDRUS_URL")
+        endpoint = os.getenv("HYDRUS_API_URL") or os.getenv("HYDRUS_URL") or "http://127.0.0.1:45869/"
         access_key = os.getenv("HYDRUS_ACCESS_KEY") or os.getenv("HYDRUS_API_KEY")
 
-        hydrus = HydrusClient(endpoint=endpoint, access_key=access_key)
-        return self.resolve_hydrus_references(config, hydrus)
+        try:
+            hydrus = HydrusClient(endpoint=endpoint, access_key=access_key)
+            return self.resolve_hydrus_references(config, hydrus)
+        except Exception as exc:
+            err_detail = str(exc).strip() or repr(exc)
+            raise ValueError(
+                f"Config contains Hydrus references but failed to connect/query Hydrus API at {endpoint}: {err_detail}"
+            ) from exc
+

@@ -14,6 +14,7 @@ except ImportError:
     from moviepy import concatenate_videoclips
 
 from .base import OperationContext, OperationHandler
+from .registry import register_operation
 
 
 def _parse_time(value: Any) -> float:
@@ -26,6 +27,7 @@ def _parse_time(value: Any) -> float:
     raise ValueError(f"Invalid time format: {value!r}, expected MM:SS or HH:MM:SS")
 
 
+@register_operation
 class TrimVideoOperation(OperationHandler):
     name = "trim_video"
 
