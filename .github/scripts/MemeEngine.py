@@ -1,3 +1,4 @@
+import functools
 import logging
 import os
 import re
@@ -85,6 +86,7 @@ class MemeEngine:
         return handler.execute(self, params, effective_context)
 
     @staticmethod
+    @functools.lru_cache(maxsize=128)
     def _resolve_font_path(font_name_or_path: str) -> Path:
         """Resolve a font name or path to an existing font file.
 

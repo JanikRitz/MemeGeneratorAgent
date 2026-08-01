@@ -1,3 +1,4 @@
+import functools
 import html
 import logging
 import math
@@ -15,6 +16,7 @@ class RichTextRenderer:
         self.logger = logging.getLogger("rich_text_renderer")
         self._missing_variant_warned: set = set()
 
+    @functools.lru_cache(maxsize=128)
     def _font_path_for_style(self, bold: bool, italic: bool) -> Path:
         if not bold and not italic:
             return self.default_font_path
@@ -151,6 +153,7 @@ class RichTextRenderer:
         # No variant found for this font family — stay consistent with the default font.
         return self.default_font_path
 
+    @functools.lru_cache(maxsize=256)
     def _load_font(self, bold: bool, italic: bool, size: int):
         font_path = self._font_path_for_style(bold, italic)
         try:
