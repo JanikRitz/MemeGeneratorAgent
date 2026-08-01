@@ -28,7 +28,7 @@ This document outlines planned improvements for `MemeEngine`, categorized into p
   - Run a pipeline job with multiple video steps.
   - Monitor open file handles and process memory usage to confirm clips are released immediately upon completion.
 
-### 3. FFmpeg Hardware Acceleration & Multithreading Flags
+### 3. FFmpeg Hardware Acceleration & Multithreading Flags [COMPLETED]
 - **Goal**: Significantly reduce render times for video memes by supporting hardware-accelerated encoders (`h264_nvenc`, `h264_qsv`, `h264_amf`) and configurable thread counts (`threads=N`).
 - **Code to Touch**:
   - [`operations/utility_ops.py`](file:///.github/scripts/operations/utility_ops.py): Update `WriteVideoOperation` to accept `threads` and hardware codec parameters.

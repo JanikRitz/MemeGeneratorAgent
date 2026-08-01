@@ -24,8 +24,9 @@ class WriteVideoOperation(OperationHandler):
         clip = params["clip"]
         output_path = params["output_path"]
         output_path_path = output_path if isinstance(output_path, Path) else Path(output_path)
+        video_codec = params.get("video_codec") or "h264_nvenc"
         write_kwargs: Dict[str, Any] = {
-            "codec": params.get("video_codec", "libx264"),
+            "codec": video_codec,
             "audio_codec": params.get("audio_codec", "aac"),
         }
         if params.get("fps") is not None:
@@ -34,19 +35,36 @@ class WriteVideoOperation(OperationHandler):
             write_kwargs["bitrate"] = str(params["video_bitrate"])
         if params.get("audio_bitrate"):
             write_kwargs["audio_bitrate"] = str(params["audio_bitrate"])
+        if params.get("threads") is not None:
+            write_kwargs["threads"] = int(params["threads"])
 
-        ffmpeg_params = self._build_ffmpeg_params(params.get("video_crf"), params.get("video_preset"))
+        ffmpeg_params = self._build_ffmpeg_params(
+            params.get("video_crf"),
+            params.get("video_preset"),
+            video_codec=video_codec,
+        )
         if ffmpeg_params:
             write_kwargs["ffmpeg_params"] = ffmpeg_params
 
         clip.write_videofile(str(output_path_path), **write_kwargs)
 
-    def _build_ffmpeg_params(self, video_crf: Optional[int], video_preset: Optional[str]) -> Optional[List[str]]:
+    def _build_ffmpeg_params(
+        self,
+        video_crf: Optional[int],
+        video_preset: Optional[str],
+        video_codec: Optional[str] = None,
+    ) -> Optional[List[str]]:
         ffmpeg_params: List[str] = []
         if video_crf is not None:
             if video_crf < 0 or video_crf > 51:
                 raise ValueError("video_crf must be between 0 and 51")
-            ffmpeg_params.extend(["-crf", str(int(video_crf))])
+            codec_lower = (video_codec or "").lower()
+            if "nvenc" in codec_lower:
+                ffmpeg_params.extend(["-cq", str(int(video_crf))])
+            elif "qsv" in codec_lower:
+                ffmpeg_params.extend(["-global_quality", str(int(video_crf))])
+            else:
+                ffmpeg_params.extend(["-crf", str(int(video_crf))])
         if video_preset is not None:
             ffmpeg_params.extend(["-preset", str(video_preset)])
         return ffmpeg_params or None

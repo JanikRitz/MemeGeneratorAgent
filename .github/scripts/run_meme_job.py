@@ -207,6 +207,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Release mode: clean old intermediate/preview files and keep only the final output artifact",
     )
+    parser.add_argument(
+        "--video-codec",
+        help="Override video codec globally (e.g. h264_nvenc, libx264, h264_qsv, h264_amf)",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        help="Override number of threads globally for video encoding (e.g. 4)",
+    )
+    parser.add_argument(
+        "--video-crf",
+        type=int,
+        help="Override video CRF/CQ quality parameter globally",
+    )
+    parser.add_argument(
+        "--video-preset",
+        help="Override video encoding preset globally (e.g. fast, medium, slow, p4)",
+    )
     return parser
 
 

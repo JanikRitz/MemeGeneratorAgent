@@ -309,12 +309,13 @@ class MemeEngine:
         clip,
         output_path: Path,
         fps: Optional[float] = None,
-        video_codec: str = "libx264",
+        video_codec: str = "h264_nvenc",
         audio_codec: str = "aac",
         video_crf: Optional[int] = None,
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
+        threads: Optional[int] = None,
     ) -> None:
         self.execute(
             "write_video",
@@ -328,6 +329,7 @@ class MemeEngine:
                 "video_preset": video_preset,
                 "video_bitrate": video_bitrate,
                 "audio_bitrate": audio_bitrate,
+                "threads": threads,
             },
         )
 
@@ -382,6 +384,8 @@ class MemeEngine:
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
+        video_codec: Optional[str] = None,
+        threads: Optional[int] = None,
     ) -> str:
         return self.execute(
             "crop_media_impl",
@@ -397,6 +401,8 @@ class MemeEngine:
                 "video_preset": video_preset,
                 "video_bitrate": video_bitrate,
                 "audio_bitrate": audio_bitrate,
+                "video_codec": video_codec,
+                "threads": threads,
             },
         )
 
@@ -411,6 +417,8 @@ class MemeEngine:
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
+        video_codec: Optional[str] = None,
+        threads: Optional[int] = None,
     ) -> str:
         return self.execute(
             "stack_media_impl",
@@ -424,6 +432,8 @@ class MemeEngine:
                 "video_preset": video_preset,
                 "video_bitrate": video_bitrate,
                 "audio_bitrate": audio_bitrate,
+                "video_codec": video_codec,
+                "threads": threads,
             },
         )
 
@@ -510,6 +520,8 @@ class MemeEngine:
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
+        video_codec: Optional[str] = None,
+        threads: Optional[int] = None,
     ) -> str:
         return self.execute(
             "apply_text_overlay",
@@ -544,6 +556,8 @@ class MemeEngine:
                 "video_preset": video_preset,
                 "video_bitrate": video_bitrate,
                 "audio_bitrate": audio_bitrate,
+                "video_codec": video_codec,
+                "threads": threads,
             },
         )
 
@@ -560,6 +574,8 @@ class MemeEngine:
         video_preset: Optional[str] = None,
         video_bitrate: Optional[str] = None,
         audio_bitrate: Optional[str] = None,
+        video_codec: Optional[str] = None,
+        threads: Optional[int] = None,
     ) -> str:
         return self.execute(
             "apply_multi_text_overlays",
@@ -575,5 +591,7 @@ class MemeEngine:
                 "video_preset": video_preset,
                 "video_bitrate": video_bitrate,
                 "audio_bitrate": audio_bitrate,
+                "video_codec": video_codec,
+                "threads": threads,
             },
         )

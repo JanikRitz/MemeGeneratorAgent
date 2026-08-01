@@ -79,9 +79,11 @@ class TrimVideoOperation(OperationHandler):
                 final_clip,
                 out_p,
                 fps=fps,
+                video_codec=params.get("video_codec") or "h264_nvenc",
                 video_crf=int(params["video_crf"]) if params.get("video_crf") is not None else None,
                 video_preset=params.get("video_preset"),
                 video_bitrate=params.get("video_bitrate"),
                 audio_bitrate=params.get("audio_bitrate"),
+                threads=int(params["threads"]) if params.get("threads") is not None else None,
             )
         return str(out_p)

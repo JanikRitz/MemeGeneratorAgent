@@ -91,3 +91,44 @@ class RunMemeJobScriptTests(unittest.TestCase):
             self.assertEqual(len(fake_service.calls), 1)
             self.assertIsNotNone(fake_service.calls[0]["output_path_resolver"])
             self.assertIsNotNone(fake_service.calls[0]["generated_path_collector"])
+
+    def test_arg_parser_supports_hardware_and_thread_overrides(self):
+        parser = run_meme_job.build_arg_parser()
+        args = parser.parse_args(["config.json", "--video-codec", "h264_nvenc", "--threads", "8", "--video-crf", "18", "--video-preset", "p6"])
+
+        self.assertEqual(args.video_codec, "h264_nvenc")
+        self.assertEqual(args.threads, 8)
+        self.assertEqual(args.video_crf, 18)
+        self.assertEqual(args.video_preset, "p6")
+
+    def test_job_execution_service_applies_cli_overrides(self):
+        from unittest.mock import MagicMock
+        from job_execution import JobExecutionService
+
+        service = JobExecutionService()
+        mock_engine = MagicMock()
+        mock_logger = MagicMock()
+        mock_handler = MagicMock()
+        mock_handler.execute.return_value = "render/out.mp4"
+
+        service.registry.get = MagicMock(return_value=mock_handler)
+
+        args = run_meme_job.build_arg_parser().parse_args(
+            ["config.json", "--video-codec", "h264_nvenc", "--threads", "4"]
+        )
+
+        config = {
+            "operation": "trim_video",
+            "params": {
+                "input_path": "media/in.mp4",
+                "output_path": "render/out.mp4",
+            },
+        }
+
+        service.execute_config(config, mock_engine, args, mock_logger)
+
+        self.assertTrue(mock_handler.execute.called)
+        (engine, params, context), _ = mock_handler.execute.call_args
+        self.assertEqual(params["video_codec"], "h264_nvenc")
+        self.assertEqual(params["threads"], 4)
+

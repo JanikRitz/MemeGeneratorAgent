@@ -45,11 +45,17 @@ class JobExecutionService:
         last_output: str = "",
         preview_only_override: Optional[bool] = None,
         default_font_path: Optional[str] = None,
+        cli_overrides: Optional[Dict[str, Any]] = None,
     ) -> str:
         operation = step.get("operation")
-        params = step.get("params", {})
+        params = dict(step.get("params", {}))
         if last_output:
             params = self._replace_last_output(params, last_output)
+
+        if cli_overrides:
+            for key, val in cli_overrides.items():
+                if val is not None:
+                    params[key] = val
 
         if not operation:
             raise ValueError("Each step must define an operation")
@@ -75,6 +81,16 @@ class JobExecutionService:
         args: argparse.Namespace,
         logger: logging.Logger,
     ) -> str:
+        cli_overrides: Dict[str, Any] = {}
+        if getattr(args, "video_codec", None) is not None:
+            cli_overrides["video_codec"] = args.video_codec
+        if getattr(args, "threads", None) is not None:
+            cli_overrides["threads"] = args.threads
+        if getattr(args, "video_crf", None) is not None:
+            cli_overrides["video_crf"] = args.video_crf
+        if getattr(args, "video_preset", None) is not None:
+            cli_overrides["video_preset"] = args.video_preset
+
         if "pipeline" in config:
             logger.info("Running pipeline with %s steps", len(config["pipeline"]))
             last_output = ""
@@ -86,6 +102,7 @@ class JobExecutionService:
                     last_output=last_output,
                     preview_only_override=args.preview_only or None,
                     default_font_path=config.get("font_path"),
+                    cli_overrides=cli_overrides,
                 )
                 logger.info("Step %s output: %s", index, last_output)
             return last_output
@@ -96,6 +113,7 @@ class JobExecutionService:
             config,
             preview_only_override=args.preview_only or None,
             default_font_path=config.get("font_path"),
+            cli_overrides=cli_overrides,
         )
         logger.info("Operation output: %s", output)
         return output
