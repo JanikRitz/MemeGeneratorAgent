@@ -71,6 +71,16 @@ class DispatchingStackImplHandler(OperationHandler):
         return "stack-dispatched"
 
 
+class DispatchingMultiTextOverlaysHandler(OperationHandler):
+    name = "apply_multi_text_overlays"
+
+    def validate(self, params):
+        return True
+
+    def execute(self, engine, params, context):
+        return "multi-overlay-dispatched"
+
+
 class MemeEngineRegistryTests(unittest.TestCase):
     def test_engine_execute_uses_registered_handler(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -122,6 +132,21 @@ class MemeEngineRegistryTests(unittest.TestCase):
 
             self.assertEqual(engine._crop_media_impl("input.mp4", "render/out.mp4"), "crop-dispatched")
             self.assertEqual(engine._stack_media_impl("one.mp4", "two.mp4", "render/out.mp4"), "stack-dispatched")
+
+    def test_engine_apply_multi_text_overlays_helper_delegates_to_registry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry = OperationRegistry()
+            registry.register(DispatchingMultiTextOverlaysHandler())
+            engine = MemeEngine(base_dir=tmpdir, logger=logging.getLogger("test"), registry=registry)
+
+            self.assertEqual(
+                engine.apply_multi_text_overlays(
+                    base_media_path="input.mp4",
+                    overlays=[],
+                    output_path="render/out.mp4",
+                ),
+                "multi-overlay-dispatched",
+            )
 
 
 if __name__ == "__main__":

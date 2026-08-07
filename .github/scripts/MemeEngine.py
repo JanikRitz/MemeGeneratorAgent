@@ -563,7 +563,7 @@ class MemeEngine:
             },
         )
 
-    def _apply_multi_text_overlays_impl(
+    def apply_multi_text_overlays(
         self,
         base_media_path: str,
         overlays: List[Dict[str, Any]],
@@ -596,4 +596,36 @@ class MemeEngine:
                 "video_codec": video_codec,
                 "threads": threads,
             },
+        )
+
+    def _apply_multi_text_overlays_impl(
+        self,
+        base_media_path: str,
+        overlays: List[Dict[str, Any]],
+        output_path: str,
+        overlay_dir: str = "render",
+        output_duration_sec: Optional[float] = None,
+        font_path: Optional[str] = None,
+        preview_only: bool = False,
+        video_crf: Optional[int] = None,
+        video_preset: Optional[str] = None,
+        video_bitrate: Optional[str] = None,
+        audio_bitrate: Optional[str] = None,
+        video_codec: Optional[str] = None,
+        threads: Optional[int] = None,
+    ) -> str:
+        return self.apply_multi_text_overlays(
+            base_media_path=base_media_path,
+            overlays=overlays,
+            output_path=output_path,
+            overlay_dir=overlay_dir,
+            output_duration_sec=output_duration_sec,
+            font_path=font_path,
+            preview_only=preview_only,
+            video_crf=video_crf,
+            video_preset=video_preset,
+            video_bitrate=video_bitrate,
+            audio_bitrate=audio_bitrate,
+            video_codec=video_codec,
+            threads=threads,
         )
