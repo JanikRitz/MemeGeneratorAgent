@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from PIL import Image
+
+try:
+    from moviepy.editor import ImageClip, VideoFileClip, clips_array
+except ImportError:
+    from moviepy import ImageClip, VideoFileClip, clips_array
+
 from .base import OperationContext, OperationHandler
 from .registry import register_operation
 
@@ -18,9 +25,55 @@ class StackMediaOperation(OperationHandler):
 
     def execute(self, engine: Any, params: Dict[str, Any], context: OperationContext) -> str:
         self.validate(params)
+        preview_only = bool(params.get("preview_only", False))
+        if context.preview_only_override is not None:
+            preview_only = context.preview_only_override
+
+        path1 = params["path1"]
+        path2 = params["path2"]
+        out_p = engine.resolve_output_path(params["output_path"])
+
+        if preview_only:
+            p1 = engine.resolve_path(path1)
+            p2 = engine.resolve_path(path2)
+            if engine._is_video(p1):
+                with VideoFileClip(str(p1)) as clip:
+                    frame1 = clip.get_frame(0)
+                img1 = Image.fromarray(frame1).convert("RGBA")
+            else:
+                img1 = Image.open(str(p1)).convert("RGBA")
+
+            if engine._is_video(p2):
+                with VideoFileClip(str(p2)) as clip:
+                    frame2 = clip.get_frame(0)
+                img2 = Image.fromarray(frame2).convert("RGBA")
+            else:
+                img2 = Image.open(str(p2)).convert("RGBA")
+
+            orientation = params.get("orientation", "horizontal")
+            if orientation == "horizontal":
+                target_h = int(min(img1.height, img2.height))
+                img1 = img1.resize((max(1, int(img1.width * target_h / img1.height)), target_h), Image.Resampling.LANCZOS)
+                img2 = img2.resize((max(1, int(img2.width * target_h / img2.height)), target_h), Image.Resampling.LANCZOS)
+                composite = Image.new("RGBA", (img1.width + img2.width, target_h), (0, 0, 0, 0))
+                composite.paste(img1, (0, 0))
+                composite.paste(img2, (img1.width, 0))
+            else:
+                target_w = int(min(img1.width, img2.width))
+                img1 = img1.resize((target_w, max(1, int(img1.height * target_w / img1.width))), Image.Resampling.LANCZOS)
+                img2 = img2.resize((target_w, max(1, int(img2.height * target_w / img2.width))), Image.Resampling.LANCZOS)
+                composite = Image.new("RGBA", (target_w, img1.height + img2.height), (0, 0, 0, 0))
+                composite.paste(img1, (0, 0))
+                composite.paste(img2, (0, img1.height))
+
+            preview_path = out_p.with_suffix(".png")
+            engine._save_image(composite, preview_path)
+            engine.logger.info("stack_media preview_only: wrote composite preview to %s", preview_path)
+            return str(preview_path)
+
         return engine._stack_media_impl(
-            path1=params["path1"],
-            path2=params["path2"],
+            path1=path1,
+            path2=path2,
             output_path=params["output_path"],
             orientation=params.get("orientation", "horizontal"),
             duration_sec=float(params.get("duration_sec", 3.0)),

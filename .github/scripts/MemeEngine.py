@@ -215,11 +215,21 @@ class MemeEngine:
     def _resolve_path_impl(self, path_value: str) -> Path:
         candidate = Path(path_value)
         full_path = candidate if candidate.is_absolute() else self.base_dir / candidate
-        if not full_path.exists():
-            raise FileNotFoundError(f"Asset not found: {full_path}")
-        if full_path.is_dir():
-            return self._resolve_media_file_from_directory(full_path)
-        return full_path
+        if full_path.exists():
+            if full_path.is_dir():
+                return self._resolve_media_file_from_directory(full_path)
+            return full_path
+
+        if full_path.suffix.lower() not in self._MEDIA_SUFFIX_PRIORITY:
+            preview_candidate = full_path.with_suffix(".png")
+            if preview_candidate.exists():
+                return preview_candidate
+
+        preview_candidate = full_path.with_suffix(".png")
+        if preview_candidate.exists():
+            return preview_candidate
+
+        raise FileNotFoundError(f"Asset not found: {full_path}")
 
     def _resolve_media_file_from_directory(self, directory: Path) -> Path:
         """Resolve a directory-backed asset to the most likely media file inside it."""
