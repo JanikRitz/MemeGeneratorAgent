@@ -11,7 +11,7 @@ import io
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
-from compact_jobs import CompactJob, validate_job
+from compact_jobs import CompactJob, Presets, validate_job
 from compact_compiler import CompactCompiler, QUALITY, STYLES
 from operations.concatenate_clips import canvas_size, fitted_size
 
@@ -110,6 +110,23 @@ class CompactCompilerTests(unittest.TestCase):
             presets = json.load(handle)["presets"]
         self.assertEqual(STYLES, presets["styles"])
         self.assertEqual(QUALITY, presets["quality"])
+
+    def test_user_presets_override_built_ins_and_add_names(self):
+        presets = Presets.model_validate({
+            "styles": {"meme": {"size": 31}, "quiet": {"size": 17, "shadow": False}},
+            "quality": {"good": {"video": {"crf": 18}}, "archive": {"image": {"image_quality": 96}}},
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            compiler = self.compiler(Path(directory))
+            video = validate_job({"format": "meme/v1", "input": "source.mp4", "output": "out.mp4", "quality": "good", "steps": [{"op": "caption", "text": "Hi", "style": "meme"}]})
+            plan = CompactCompiler(Path(directory), compiler.engine, resolve=compiler.resolve, probe=compiler.probe, presets=presets).compile(video)
+            self.assertEqual(plan.steps[0].params["overlays"][0]["font_size"], 31)
+            self.assertEqual(plan.steps[0].params["video_crf"], 18)
+            self.assertEqual(plan.steps[0].params["video_bitrate"], "3000k")
+            image = validate_job({"format": "meme/v1", "input": "source.png", "output": "out.jpg", "quality": "archive", "steps": [{"op": "caption", "text": "Hi", "style": "quiet"}]})
+            plan = CompactCompiler(Path(directory), compiler.engine, resolve=compiler.resolve, probe=compiler.probe, presets=presets).compile(image)
+            self.assertEqual(plan.steps[0].params["font_size"], 17)
+            self.assertEqual(plan.steps[0].params["image_quality"], 96)
 
     def test_concat_preserves_main_result_and_branch_order(self):
         with tempfile.TemporaryDirectory() as directory:

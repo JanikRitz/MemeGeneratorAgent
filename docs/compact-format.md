@@ -26,6 +26,32 @@ Concatenation requires FFmpeg's `ffprobe` executable on PATH, in addition to the
 FFmpeg binary MoviePy uses. Text jobs require the referenced fonts to be installed.
 Compact video encoding defaults to `libx264` so an NVIDIA GPU is not required.
 Use `--video-codec`, `--video-crf`, `--video-preset`, and `--threads` for overrides.
+`--config` (or the positional argument) always selects the compact job. To replace
+built-in style/quality presets or add named ones, pass a separate `--presets` JSON
+file, resolved relative to `--project-root`:
+
+```powershell
+python .github/scripts/run_meme_job.py --config config/examples/video_bottom_text_box.json --presets config/my-presets.json --release
+```
+
+```json
+{
+  "styles": {
+    "meme": {"size": 48, "stroke": 4},
+    "subtle": {"size": 28, "shadow": false, "background": "transparent"}
+  },
+  "quality": {
+    "good": {"video": {"crf": 18, "preset": "slow", "bitrate": "5000k"}},
+    "archive": {"image": {"image_quality": 96, "optimize": true}}
+  }
+}
+```
+
+Each entry merges into the built-in preset with the same name. New style names use
+the `meme` style as a baseline, and new quality names define their own image and/or
+video profile. New names can be referenced by `style` or `quality` in the job. A
+style preset accepts caption/panel appearance fields except `style`; a quality
+preset must have an `image` and/or `video` `encode`-field map.
 
 Compact jobs always execute: timestamp-only caching is not used, and `--force` is
 unnecessary. `--release` deletes this run's owned scratch directory after success;
@@ -256,7 +282,8 @@ For a caption/panel: built-in style < explicit step appearance.
 For each `captions` item: start from the item's named style, else the step's named
 style, else `meme`; then apply explicit shared step appearance, then item appearance.
 The job font fills missing font values; a step/item font takes precedence.
-Styles do not inherit other styles and jobs cannot import arbitrary preset files in v1.
+Styles do not inherit other styles. Use the runner's `--presets` option for shared
+custom presets; jobs do not import preset files themselves.
 
 Times are numeric seconds relative to the current step's input, not the original
 source. Caption `start` defaults to 0; omitted `end` means the composition duration.

@@ -13,7 +13,7 @@ from pydantic import Field
 
 from compact_jobs import (
     Appearance, Branch, Caption, Captions, CompactJob, Concat, Crop, Model,
-    Panel, Scale, Stack, StashScene, Trim,
+    Panel, Presets, Scale, Stack, StashScene, Trim,
 )
 from config_preparation import ConfigPreparationService
 
@@ -95,7 +95,7 @@ class Media:
 class CompactCompiler:
     def __init__(
         self, root: Path, engine, resolve: Callable[[Any], Any] | None = None,
-        probe: Callable[[str], dict] | None = None,
+        probe: Callable[[str], dict] | None = None, presets: Presets | None = None,
     ):
         self.root = root.resolve()
         self.engine = engine
@@ -104,6 +104,18 @@ class CompactCompiler:
         self.probe = probe or engine.get_media_info
         self.require_existing_sources = probe is None
         self.media_cache: dict[str, Media] = {}
+        preset_values = presets or Presets()
+        self.styles = dict(STYLES)
+        for name, value in preset_values.styles.items():
+            self.styles[name] = {**STYLES.get(name, STYLES["meme"]), **value.model_dump(exclude_none=True)}
+        self.quality = dict(QUALITY)
+        for name, value in preset_values.quality.items():
+            profile = self.quality.get(name, {})
+            override = value.model_dump(exclude_none=True)
+            self.quality[name] = {
+                kind: {**profile.get(kind, {}), **settings}
+                for kind, settings in {**profile, **override}.items()
+            }
 
     def source(self, value, label: str) -> Media:
         raw = value.model_dump(by_alias=True, exclude_none=True) if isinstance(value, Model) else value
@@ -148,7 +160,9 @@ class CompactCompiler:
 
     def text(self, entry: Appearance, shared: Appearance | None = None, panel: bool = False) -> dict:
         style = entry.style or (shared.style if shared else None) or ("panel" if panel else "meme")
-        values = dict(STYLES[style])
+        if style not in self.styles:
+            raise ValueError(f"unknown style {style!r}")
+        values = dict(self.styles[style])
         if self.job.font:
             values["font"] = self.job.font
         for layer in (shared, entry):
@@ -164,7 +178,9 @@ class CompactCompiler:
 
     def encoding(self, step, suffix: str) -> dict:
         kind = "image" if suffix in IMAGE_SUFFIXES else "video"
-        profile = QUALITY.get(self.job.quality, {})
+        if self.job.quality is not None and self.job.quality not in self.quality:
+            raise ValueError(f"unknown quality {self.job.quality!r}")
+        profile = self.quality.get(self.job.quality, {})
         if profile and kind not in profile:
             raise ValueError(f"quality {self.job.quality!r} has no {kind} profile")
         values = dict(profile.get(kind, {}))

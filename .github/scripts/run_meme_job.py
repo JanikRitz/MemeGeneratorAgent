@@ -197,6 +197,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run MemeEngine jobs from a JSON config file.")
     parser.add_argument("config_path", nargs="?", help="Path to JSON config (positional)")
     parser.add_argument("--config", help="Path to JSON config")
+    parser.add_argument("--presets", type=Path, help="Path to JSON style and quality preset overrides for compact jobs")
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[2], help="Base directory for relative media and output paths")
     parser.add_argument("--example", help="Select a named job from a compact example catalog")
     mode = parser.add_mutually_exclusive_group()
@@ -270,6 +271,14 @@ def main() -> None:
     project_root = args.project_root.resolve()
     if not project_root.is_dir():
         parser.error("--project-root must be an existing directory")
+    presets = None
+    if args.presets:
+        preset_path = args.presets if args.presets.is_absolute() else project_root / args.presets
+        try:
+            from compact_jobs import Presets
+            presets = Presets.model_validate(load_config_file(preset_path))
+        except Exception as exc:
+            parser.error(f"Invalid --presets file {preset_path}: {str(exc).strip() or repr(exc)}")
     failed = False
     for cfg_file in config_files:
         try:
@@ -288,7 +297,7 @@ def main() -> None:
                     continue
                 engine = JOB_EXECUTION_SERVICE.engine_factory(str(project_root), logging.getLogger("meme_engine"))
                 overrides = {"codec": args.video_codec, "crf": args.video_crf, "preset": args.video_preset, "threads": args.threads}
-                plan = CompactCompiler(project_root, engine).compile(job, preview=args.preview_only, overrides=overrides)
+                plan = CompactCompiler(project_root, engine, presets=presets).compile(job, preview=args.preview_only, overrides=overrides)
                 if args.expand:
                     print(plan.model_dump_json(indent=2))
                 else:

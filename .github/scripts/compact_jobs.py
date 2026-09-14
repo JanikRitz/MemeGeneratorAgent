@@ -51,8 +51,8 @@ class HydrusSearchSource(Model):
 
 
 Source = Union[Nonempty, StashScene, StashImage, HydrusSource, HydrusSearchSource]
-Style = Literal["meme", "headline", "meme-compact", "panel"]
-Quality = Literal["good", "balanced", "crunchy", "super_crunchy"]
+Style = Nonempty
+Quality = Nonempty
 
 
 class Encoding(Model):
@@ -81,6 +81,30 @@ class Appearance(Model):
     line_height: Positive | None = None
     paragraph_spacing: Annotated[int, Field(ge=0)] | None = None
     indent: Annotated[int, Field(ge=0)] | None = None
+
+
+class StylePreset(Appearance):
+    @model_validator(mode="after")
+    def cannot_reference_style(self):
+        if self.style is not None:
+            raise ValueError("style presets cannot reference another style")
+        return self
+
+
+class QualityPreset(Model):
+    image: Encoding | None = None
+    video: Encoding | None = None
+
+    @model_validator(mode="after")
+    def needs_media_profile(self):
+        if self.image is None and self.video is None:
+            raise ValueError("quality preset requires image or video settings")
+        return self
+
+
+class Presets(Model):
+    styles: dict[Nonempty, StylePreset] = Field(default_factory=dict)
+    quality: dict[Nonempty, QualityPreset] = Field(default_factory=dict)
 
 
 class Step(Model):
