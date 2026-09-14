@@ -1,14 +1,14 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/vertical_image.png",
-    "output":  "render/examples/image_only_overlay.png",
-    "steps":  [
-                  {
-                      "op":  "caption",
-                      "text":  "\u003cb\u003eIMAGE-ONLY MEME\u003c/b\u003e\n\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003eoverlay png matched to source image\u003c/i\u003e\u003c/span\u003e",
-                      "at":  "bottom",
-                      "size":  56,
-                      "line_height":  0.95
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/vertical_image.png",
+  "output": "render/examples/image_only_overlay.png",
+  "steps": [
+    {
+      "op": "caption",
+      "text": "\u003cb\u003eIMAGE-ONLY MEME\u003c/b\u003e\n\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003eoverlay png matched to source image\u003c/i\u003e\u003c/span\u003e",
+      "at": "bottom",
+      "size": 56,
+      "line_height": 0.95
+    }
+  ]
 }

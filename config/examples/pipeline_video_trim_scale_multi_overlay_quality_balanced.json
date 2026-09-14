@@ -1,42 +1,42 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/video.mp4",
-    "output":  "render/examples/video_trim_scale_overlay_balanced.mp4",
-    "quality":  "balanced",
-    "steps":  [
-                  {
-                      "op":  "trim",
-                      "start":  1,
-                      "end":  6,
-                      "encode":  {
-                                     "crf":  28,
-                                     "bitrate":  "1400k"
-                                 }
-                  },
-                  {
-                      "op":  "scale",
-                      "max_long_side":  720
-                  },
-                  {
-                      "op":  "captions",
-                      "style":  "headline",
-                      "encode":  {
-                                     "bitrate":  "1100k"
-                                 },
-                      "items":  [
-                                    {
-                                        "text":  "**BALANCED QUALITY**",
-                                        "at":  "top",
-                                        "end":  5
-                                    },
-                                    {
-                                        "text":  "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003emiddle ground for share size + legibility\u003c/i\u003e\u003c/span\u003e",
-                                        "at":  "bottom",
-                                        "size":  22,
-                                        "start":  2,
-                                        "end":  5
-                                    }
-                                ]
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/video.mp4",
+  "output": "render/examples/video_trim_scale_overlay_balanced.mp4",
+  "quality": "balanced",
+  "steps": [
+    {
+      "op": "trim",
+      "start": 1,
+      "end": 6,
+      "encode": {
+        "crf": 28,
+        "bitrate": "1400k"
+      }
+    },
+    {
+      "op": "scale",
+      "max_long_side": 720
+    },
+    {
+      "op": "captions",
+      "style": "headline",
+      "encode": {
+        "bitrate": "1100k"
+      },
+      "items": [
+        {
+          "text": "**BALANCED QUALITY**",
+          "at": "top",
+          "end": 5
+        },
+        {
+          "text": "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003emiddle ground for share size + legibility\u003c/i\u003e\u003c/span\u003e",
+          "at": "bottom",
+          "size": 22,
+          "start": 2,
+          "end": 5
+        }
+      ]
+    }
+  ]
 }

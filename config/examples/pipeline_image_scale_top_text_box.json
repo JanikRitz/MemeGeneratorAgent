@@ -1,17 +1,17 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/image.jpeg",
-    "output":  "render/examples/image_top_box_1080.png",
-    "steps":  [
-                  {
-                      "op":  "scale",
-                      "max_long_side":  1080,
-                      "intermediate_format":  "jpeg"
-                  },
-                  {
-                      "op":  "panel",
-                      "text":  "[color=#000000]Girls be Girls[/color]",
-                      "background":  "#ff69b4"
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/image.jpeg",
+  "output": "render/examples/image_top_box_1080.png",
+  "steps": [
+    {
+      "op": "scale",
+      "max_long_side": 1080,
+      "intermediate_format": "jpeg"
+    },
+    {
+      "op": "panel",
+      "text": "[color=#000000]Girls be Girls[/color]",
+      "background": "#ff69b4"
+    }
+  ]
 }

@@ -1,19 +1,19 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/vertical_video.mp4",
-    "output":  "render/examples/with_right_box.mp4",
-    "steps":  [
-                  {
-                      "op":  "panel",
-                      "side":  "right",
-                      "style":  "meme",
-                      "text":  "**MEME CONTEXT**  \nThis side panel keeps the full video visible and wraps long lines automatically.",
-                      "background":  "#155ca2",
-                      "align":  "left",
-                      "size":  60,
-                      "line_height":  1.2,
-                      "ratio":  0.5,
-                      "stroke":  2
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/vertical_video.mp4",
+  "output": "render/examples/with_right_box.mp4",
+  "steps": [
+    {
+      "op": "panel",
+      "side": "right",
+      "style": "meme",
+      "text": "**MEME CONTEXT**  \nThis side panel keeps the full video visible and wraps long lines automatically.",
+      "background": "#155ca2",
+      "align": "left",
+      "size": 60,
+      "line_height": 1.2,
+      "ratio": 0.5,
+      "stroke": 2
+    }
+  ]
 }

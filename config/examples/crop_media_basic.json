@@ -1,16 +1,16 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/video.mp4",
-    "output":  "render/crop_example.mp4",
-    "encode":  {
-                   "crf":  23,
-                   "preset":  "medium"
-               },
-    "steps":  [
-                  {
-                      "op":  "crop",
-                      "left":  100,
-                      "right":  100
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/video.mp4",
+  "output": "render/crop_example.mp4",
+  "encode": {
+    "crf": 23,
+    "preset": "medium"
+  },
+  "steps": [
+    {
+      "op": "crop",
+      "left": 100,
+      "right": 100
+    }
+  ]
 }

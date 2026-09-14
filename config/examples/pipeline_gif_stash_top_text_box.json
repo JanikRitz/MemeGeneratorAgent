@@ -1,22 +1,22 @@
 {
-    "format":  "meme/v1",
-    "input":  "stash:image:430765",
-    "output":  "render/examples/gif_stash_top_box.mp4",
-    "encode":  {
-                   "crf":  28,
-                   "preset":  "fast"
-               },
-    "steps":  [
-                  {
-                      "op":  "scale",
-                      "max_long_side":  640
-                  },
-                  {
-                      "op":  "panel",
-                      "text":  "[color=#000]Not your typical girl[/color]",
-                      "background":  "#8c9ea0",
-                      "size":  64,
-                      "font":  "C:\\Windows\\Fonts\\IMPACT.ttf"
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "stash:image:430765",
+  "output": "render/examples/gif_stash_top_box.mp4",
+  "encode": {
+    "crf": 28,
+    "preset": "fast"
+  },
+  "steps": [
+    {
+      "op": "scale",
+      "max_long_side": 640
+    },
+    {
+      "op": "panel",
+      "text": "[color=#000]Not your typical girl[/color]",
+      "background": "#8c9ea0",
+      "size": 64,
+      "font": "C:\\Windows\\Fonts\\IMPACT.ttf"
+    }
+  ]
 }

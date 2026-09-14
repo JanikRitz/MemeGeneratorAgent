@@ -1,12 +1,12 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/vertical_video.mp4",
-    "output":  "render/examples/stacked.mp4",
-    "steps":  [
-                  {
-                      "op":  "stack",
-                      "with":  "media/examples/vertical_image.png",
-                      "duration":  5
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/vertical_video.mp4",
+  "output": "render/examples/stacked.mp4",
+  "steps": [
+    {
+      "op": "stack",
+      "with": "media/examples/vertical_image.png",
+      "duration": 5
+    }
+  ]
 }

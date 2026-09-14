@@ -1,24 +1,24 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/video.mp4",
-    "output":  "render/examples/overlayed.mp4",
-    "steps":  [
-                  {
-                      "op":  "captions",
-                      "size":  52,
-                      "items":  [
-                                    {
-                                        "text":  "*TOP TEXT* WOW",
-                                        "at":  "top",
-                                        "end":  4.5
-                                    },
-                                    {
-                                        "text":  "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003ebottom text\u003c/i\u003e\u003c/span\u003e",
-                                        "at":  "bottom",
-                                        "start":  3.5,
-                                        "end":  7
-                                    }
-                                ]
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/video.mp4",
+  "output": "render/examples/overlayed.mp4",
+  "steps": [
+    {
+      "op": "captions",
+      "size": 52,
+      "items": [
+        {
+          "text": "*TOP TEXT* WOW",
+          "at": "top",
+          "end": 4.5
+        },
+        {
+          "text": "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003ebottom text\u003c/i\u003e\u003c/span\u003e",
+          "at": "bottom",
+          "start": 3.5,
+          "end": 7
+        }
+      ]
+    }
+  ]
 }

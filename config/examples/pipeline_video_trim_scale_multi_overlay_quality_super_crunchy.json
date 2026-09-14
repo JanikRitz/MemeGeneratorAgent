@@ -1,43 +1,43 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/video.mp4",
-    "output":  "render/examples/video_trim_scale_overlay_super_crunchy.mp4",
-    "quality":  "super_crunchy",
-    "steps":  [
-                  {
-                      "op":  "trim",
-                      "start":  1,
-                      "end":  6,
-                      "encode":  {
-                                     "crf":  38,
-                                     "bitrate":  "450k",
-                                     "audio_bitrate":  "48k"
-                                 }
-                  },
-                  {
-                      "op":  "scale",
-                      "max_long_side":  480
-                  },
-                  {
-                      "op":  "captions",
-                      "style":  "meme-compact",
-                      "encode":  {
-                                     "crf":  41,
-                                     "bitrate":  "320k"
-                                 },
-                      "items":  [
-                                    {
-                                        "text":  "**SUPER CRUNCHY**",
-                                        "at":  "top",
-                                        "end":  5
-                                    },
-                                    {
-                                        "text":  "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003ereposted too many times\u003c/i\u003e\u003c/span\u003e",
-                                        "at":  "bottom",
-                                        "start":  2,
-                                        "end":  5
-                                    }
-                                ]
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/video.mp4",
+  "output": "render/examples/video_trim_scale_overlay_super_crunchy.mp4",
+  "quality": "super_crunchy",
+  "steps": [
+    {
+      "op": "trim",
+      "start": 1,
+      "end": 6,
+      "encode": {
+        "crf": 38,
+        "bitrate": "450k",
+        "audio_bitrate": "48k"
+      }
+    },
+    {
+      "op": "scale",
+      "max_long_side": 480
+    },
+    {
+      "op": "captions",
+      "style": "meme-compact",
+      "encode": {
+        "crf": 41,
+        "bitrate": "320k"
+      },
+      "items": [
+        {
+          "text": "**SUPER CRUNCHY**",
+          "at": "top",
+          "end": 5
+        },
+        {
+          "text": "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003ereposted too many times\u003c/i\u003e\u003c/span\u003e",
+          "at": "bottom",
+          "start": 2,
+          "end": 5
+        }
+      ]
+    }
+  ]
 }

@@ -1,41 +1,41 @@
 {
-    "format":  "meme/v1",
-    "input":  "media/examples/video.mp4",
-    "output":  "render/examples/video_trim_scale_overlay_good.mp4",
-    "quality":  "good",
-    "steps":  [
-                  {
-                      "op":  "trim",
-                      "start":  1,
-                      "end":  6,
-                      "encode":  {
-                                     "bitrate":  "3500k"
-                                 }
-                  },
-                  {
-                      "op":  "scale",
-                      "max_long_side":  1280
-                  },
-                  {
-                      "op":  "captions",
-                      "style":  "headline",
-                      "encode":  {
-                                     "crf":  19
-                                 },
-                      "items":  [
-                                    {
-                                        "text":  "**RELATIVELY GOOD QUALITY**",
-                                        "at":  "top",
-                                        "size":  26,
-                                        "end":  5
-                                    },
-                                    {
-                                        "text":  "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003ecleaner encode, still meme-ready\u003c/i\u003e\u003c/span\u003e",
-                                        "at":  "bottom",
-                                        "start":  2,
-                                        "end":  5
-                                    }
-                                ]
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "media/examples/video.mp4",
+  "output": "render/examples/video_trim_scale_overlay_good.mp4",
+  "quality": "good",
+  "steps": [
+    {
+      "op": "trim",
+      "start": 1,
+      "end": 6,
+      "encode": {
+        "bitrate": "3500k"
+      }
+    },
+    {
+      "op": "scale",
+      "max_long_side": 1280
+    },
+    {
+      "op": "captions",
+      "style": "headline",
+      "encode": {
+        "crf": 19
+      },
+      "items": [
+        {
+          "text": "**RELATIVELY GOOD QUALITY**",
+          "at": "top",
+          "size": 26,
+          "end": 5
+        },
+        {
+          "text": "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003ecleaner encode, still meme-ready\u003c/i\u003e\u003c/span\u003e",
+          "at": "bottom",
+          "start": 2,
+          "end": 5
+        }
+      ]
+    }
+  ]
 }

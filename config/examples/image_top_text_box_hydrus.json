@@ -1,14 +1,14 @@
 {
-    "format":  "meme/v1",
-    "input":  "hydrus:file_id:21602506",
-    "output":  "render/examples/image_top_box_hydrus.png",
-    "duration":  5,
-    "steps":  [
-                  {
-                      "op":  "panel",
-                      "text":  "[color=#000]Hydrus Source[/color]",
-                      "background":  "#7ad3ff",
-                      "size":  128
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "hydrus:file_id:21602506",
+  "output": "render/examples/image_top_box_hydrus.png",
+  "duration": 5,
+  "steps": [
+    {
+      "op": "panel",
+      "text": "[color=#000]Hydrus Source[/color]",
+      "background": "#7ad3ff",
+      "size": 128
+    }
+  ]
 }

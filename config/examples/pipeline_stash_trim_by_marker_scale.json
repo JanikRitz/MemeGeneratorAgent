@@ -1,24 +1,24 @@
 {
-    "format":  "meme/v1",
-    "input":  "stash:scene:1141",
-    "output":  "render/examples/stash_trim_by_marker.mp4",
-    "steps":  [
-                  {
-                      "op":  "trim",
-                      "marker":  {
-                                     "id":  878,
-                                     "fallback_duration":  2
-                                 }
-                  },
-                  {
-                      "op":  "scale",
-                      "max_long_side":  640,
-                      "encode":  {
-                                     "crf":  30,
-                                     "preset":  "fast",
-                                     "bitrate":  "1200k",
-                                     "audio_bitrate":  "96k"
-                                 }
-                  }
-              ]
+  "format": "meme/v1",
+  "input": "stash:scene:1141",
+  "output": "render/examples/stash_trim_by_marker.mp4",
+  "steps": [
+    {
+      "op": "trim",
+      "marker": {
+        "id": 878,
+        "fallback_duration": 2
+      }
+    },
+    {
+      "op": "scale",
+      "max_long_side": 640,
+      "encode": {
+        "crf": 30,
+        "preset": "fast",
+        "bitrate": "1200k",
+        "audio_bitrate": "96k"
+      }
+    }
+  ]
 }

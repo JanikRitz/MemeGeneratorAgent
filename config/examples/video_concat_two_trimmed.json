@@ -3,11 +3,15 @@
   "input": "media/examples/video.mp4",
   "output": "render/examples/two_trimmed_clips.mp4",
   "steps": [
-    {"op": "trim", "start": 2, "end": 6},
-    {"op": "concat", "with": [
-      {"input": "media/examples/vertical_video.mp4", "steps": [
-        {"op": "trim", "start": 10, "end": 13}
-      ]}
-    ]}
+    { "op": "trim", "start": 2, "end": 6 },
+    {
+      "op": "concat",
+      "with": [
+        {
+          "input": "media/examples/vertical_video.mp4",
+          "steps": [{ "op": "trim", "start": 10, "end": 13 }]
+        }
+      ]
+    }
   ]
 }
