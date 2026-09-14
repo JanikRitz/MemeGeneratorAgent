@@ -168,14 +168,180 @@ class CompactCompilerTests(unittest.TestCase):
             for failure in (False, True):
                 plan = compiler.compile(validate_job(catalog_jobs()["video_trim"]))
                 engine = MagicMock()
-                engine.execute.return_value = plan.output
+                def render(operation, params, context):
+                    Path(params["output_path"]).write_bytes(b"rendered")
+                    return params["output_path"]
+                engine.execute.side_effect = render
                 if failure:
                     engine.execute.side_effect = RuntimeError("render failed")
                     with self.assertRaisesRegex(ValueError, "steps\\[0\\].*render failed"):
-                        plan.execute(engine)
+                        plan.execute(engine, no_cache=True)
                 else:
-                    self.assertEqual(plan.execute(engine, release=True), plan.output)
+                    self.assertEqual(plan.execute(engine, release=True, no_cache=True), plan.output)
                 self.assertFalse(Path(plan.scratch).exists())
+
+
+class PlanExecutionTests(unittest.TestCase):
+    def test_failed_render_preserves_existing_output(self):
+        from compact_compiler import ExecutionPlan, PlannedStep
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "out.png"
+            output.write_bytes(b"previous")
+            plan = ExecutionPlan(output=str(output), scratch=str(root / "scratch"), steps=[
+                PlannedStep(source="steps[0]", operation="scale_media", params={"output_path": str(output)})
+            ])
+            engine = MagicMock()
+            def fail(operation, params, context):
+                Path(params["output_path"]).write_bytes(b"partial")
+                raise RuntimeError("render interrupted")
+            engine.execute.side_effect = fail
+            with self.assertRaisesRegex(ValueError, "render interrupted"):
+                plan.execute(engine, no_cache=True)
+            self.assertEqual(output.read_bytes(), b"previous")
+            self.assertFalse(Path(plan.scratch).exists())
+
+    def test_failed_replace_preserves_output_and_removes_temporary(self):
+        from plan_executor import atomic_publish
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, destination = root / "source.png", root / "out.png"
+            source.write_bytes(b"new")
+            destination.write_bytes(b"previous")
+            with patch("plan_executor.os.replace", side_effect=PermissionError("locked")):
+                with self.assertRaises(PermissionError):
+                    atomic_publish(source, destination)
+            self.assertEqual(destination.read_bytes(), b"previous")
+            self.assertEqual(set(root.iterdir()), {source, destination})
+
+    def test_persistent_cache_reuses_steps_and_invalidates_changed_inputs(self):
+        import logging
+        import os
+        from PIL import Image
+        from MemeEngine import MemeEngine
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.png"
+            Image.new("RGB", (32, 24), "red").save(source)
+            job = validate_job({"format": "meme/v1", "input": "source.png", "output": "out.png", "steps": [
+                {"op": "scale", "max_long_side": 16}, {"op": "crop", "left": 2}
+            ]})
+            def run(current_job, expected_calls, **options):
+                engine = MemeEngine(str(root), logging.getLogger("test"))
+                plan = CompactCompiler(root, engine).compile(current_job, preview=options.get("preview", False))
+                original = engine.execute
+                operations = []
+                def execute(operation, params, context=None):
+                    if operation in {"scale_media", "crop_media"}:
+                        operations.append(operation)
+                    return original(operation, params, context)
+                with patch.object(engine, "execute", side_effect=execute):
+                    plan.execute(engine, release=True, **options)
+                self.assertEqual(operations, expected_calls)
+                return plan
+            run(job, ["scale_media", "crop_media"])
+            (root / "out.png").write_bytes(b"user modified")
+            run(job, [])
+            with Image.open(root / "out.png") as image:
+                self.assertEqual(image.size, (14, 12))
+            run(job, ["scale_media", "crop_media"], preview=True)
+            run(job, [], preview=True)
+            job.steps[1].left = 4
+            run(job, ["crop_media"])
+            job.output = "elsewhere.png"
+            run(job, [])
+            run(job, ["scale_media", "crop_media"], force=True)
+            run(job, ["scale_media", "crop_media"], no_cache=True)
+            timestamps = source.stat()
+            Image.new("RGB", (32, 24), "blue").save(source)
+            os.utime(source, ns=(timestamps.st_atime_ns, timestamps.st_mtime_ns))
+            run(job, ["scale_media", "crop_media"])
+            for artifact in (root / ".meme-cache").glob("*/artifacts/result.png"):
+                artifact.write_bytes(b"corrupt")
+            run(job, ["scale_media", "crop_media"])
+
+    def test_cache_key_tracks_fonts_encoding_runtime_and_input_order(self):
+        from plan_executor import PlanExecutor
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, other, font = root / "source.png", root / "other.png", root / "font.ttf"
+            source.write_bytes(b"source")
+            other.write_bytes(b"other")
+            font.write_bytes(b"font version one")
+            engine = MagicMock()
+            renderer = engine._get_renderer.return_value
+            renderer._font_path_for_style.return_value = font
+            renderer.default_size = 40
+            executor = PlanExecutor(root / "cache")
+            params = {"base_media_path": str(source), "output_path": str(root / "out.mp4"),
+                      "overlays": [{"text": "hello"}], "video_crf": 20}
+            def key(values=params, runtime="runtime-one"):
+                return executor._key("apply_multi_text_overlays", values, engine, False, runtime)
+            original = key()
+            self.assertNotEqual(original, key({**params, "video_crf": 30}))
+            self.assertNotEqual(original, key(runtime="runtime-two"))
+            self.assertNotEqual(original, key({**params, "output_path": str(root / "out.webm")}))
+            font.write_bytes(b"font version two")
+            self.assertNotEqual(original, key())
+            concat = {"clip_paths": [str(source), str(other)], "output_path": str(root / "out.mp4")}
+            first = executor._key("concatenate_clips", concat, engine, False, "runtime")
+            concat["clip_paths"].reverse()
+            self.assertNotEqual(first, executor._key("concatenate_clips", concat, engine, False, "runtime"))
+
+    def test_completed_step_cache_survives_later_failure(self):
+        import logging
+        from PIL import Image
+        from MemeEngine import MemeEngine
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Image.new("RGB", (32, 24), "red").save(root / "source.png")
+            output = root / "out.png"
+            output.write_bytes(b"previous output")
+            job = validate_job({"format": "meme/v1", "input": "source.png", "output": "out.png", "steps": [
+                {"op": "scale", "max_long_side": 16}, {"op": "crop", "left": 2}
+            ]})
+            engine = MemeEngine(str(root), logging.getLogger("test"))
+            plan = CompactCompiler(root, engine).compile(job)
+            original = engine.execute
+            def fail_crop(operation, params, context=None):
+                if operation == "crop_media":
+                    Path(params["output_path"]).write_bytes(b"partial")
+                    raise RuntimeError("crop failed")
+                return original(operation, params, context)
+            with patch.object(engine, "execute", side_effect=fail_crop), self.assertRaisesRegex(ValueError, "steps\\[1\\].*crop failed"):
+                plan.execute(engine)
+            self.assertEqual(output.read_bytes(), b"previous output")
+            self.assertFalse(Path(plan.scratch).exists())
+            self.assertEqual(len(list((root / ".meme-cache").glob("*/manifest.json"))), 1)
+            retry = CompactCompiler(root, engine).compile(job)
+            def reject_scale(operation, params, context=None):
+                if operation == "scale_media":
+                    raise AssertionError("completed scale should be cached")
+                return original(operation, params, context)
+            with patch.object(engine, "execute", side_effect=reject_scale):
+                retry.execute(engine, release=True)
+            with Image.open(output) as image:
+                self.assertEqual(image.size, (14, 12))
+
+    def test_empty_output_is_not_published_or_cached(self):
+        from compact_compiler import ExecutionPlan, PlannedStep
+        from plan_executor import PlanExecutor
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "out.png"
+            output.write_bytes(b"previous")
+            plan = ExecutionPlan(output=str(output), scratch=str(root / "scratch"), steps=[
+                PlannedStep(source="steps[0]", operation="scale_media", params={"output_path": str(output)})
+            ])
+            engine = MagicMock()
+            def render_empty(operation, params, context):
+                Path(params["output_path"]).touch()
+                return params["output_path"]
+            engine.execute.side_effect = render_empty
+            with patch("plan_executor.runtime_fingerprint", return_value="runtime"), self.assertRaisesRegex(ValueError, "nonempty output"):
+                PlanExecutor(root / "cache").execute(plan, engine)
+            self.assertEqual(output.read_bytes(), b"previous")
+            self.assertFalse((root / "cache").exists())
 
 
 class CompactCliTests(unittest.TestCase):
@@ -215,11 +381,17 @@ class CompactCliTests(unittest.TestCase):
                     else:
                         with Image.open(result) as image:
                             self.assertGreater(image.width, 0)
+                    cached = CompactCompiler(root, engine).compile(job)
+                    with patch.object(engine, "execute", side_effect=AssertionError("warm plan must not render")):
+                        self.assertEqual(cached.execute(engine), result)
+                    for step in cached.steps:
+                        if "overlay_dir" in step.params:
+                            self.assertTrue(list(Path(step.params["overlay_dir"]).glob("*.png")))
 
     def test_validate_is_offline_and_supports_catalog_selection(self):
         import run_meme_job
         args = ["run_meme_job.py", str(ROOT / "config/mockups/compact-examples.json"), "--example", "video_concat_two_trimmed", "--validate"]
-        with patch.object(sys, "argv", args), patch.object(run_meme_job.JOB_EXECUTION_SERVICE, "engine_factory", side_effect=AssertionError("must be offline")), contextlib.redirect_stdout(io.StringIO()) as output:
+        with patch.object(sys, "argv", args), patch.object(run_meme_job, "MemeEngine", side_effect=AssertionError("must be offline")), contextlib.redirect_stdout(io.StringIO()) as output:
             run_meme_job.main()
         self.assertIn("Valid:", output.getvalue())
 

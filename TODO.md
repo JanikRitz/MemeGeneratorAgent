@@ -70,7 +70,7 @@ This document outlines planned improvements for `MemeEngine`, categorized into p
 - **Goal**: Automatically track and clean up intermediate PNG text overlays and temporary media assets generated during multi-step pipeline execution upon completion or failure.
 - **Code to Touch**:
   - [`operations/base.py`](file:///.github/scripts/operations/base.py): Add workspace scratch directory manager to `OperationContext`.
-  - [`job_execution.py`](file:///.github/scripts/job_execution.py): Integrate scratch cleanup with `JobExecutionService.execute_config`.
+  - [plan_executor.py](.github/scripts/plan_executor.py): Owned scratch cleanup and atomic publication are implemented; persistent cache entries survive release and failure. Concurrent ownership/locking remains future work.
 - **Verification**:
   - Execute a multi-step pipeline job and verify intermediate overlay files are removed while preserving final output artifacts.
 

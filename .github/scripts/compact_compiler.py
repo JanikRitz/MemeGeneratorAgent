@@ -54,33 +54,11 @@ class ExecutionPlan(Model):
     steps: list[PlannedStep] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
 
-    def execute(self, engine, preview: bool = False, release: bool = False) -> str:
-        from operations.base import OperationContext
+    def execute(self, engine, preview: bool = False, release: bool = False, force: bool = False, no_cache: bool = False, cache_dir: Path | None = None) -> str:
+        from plan_executor import PlanExecutor
 
-        scratch = Path(self.scratch)
-        scratch.mkdir(parents=True, exist_ok=False)
-        outputs: dict[str, str] = {}
-        succeeded = False
-        try:
-            result = ""
-            for step in self.steps:
-                params = dict(step.params)
-                for key in ("input_path", "base_media_path", "media_path", "path1", "path2"):
-                    if key in params:
-                        params[key] = outputs.get(params[key], params[key])
-                if "clip_paths" in params:
-                    params["clip_paths"] = [outputs.get(path, path) for path in params["clip_paths"]]
-                context = OperationContext(engine=engine, logger=engine.logger, preview_only_override=preview)
-                try:
-                    result = engine.execute(step.operation, params, context)
-                except Exception as exc:
-                    raise ValueError(f"{step.source}: {exc}") from exc
-                outputs[step.params["output_path"]] = result
-            succeeded = True
-            return result
-        finally:
-            if release or not succeeded:
-                shutil.rmtree(scratch)
+        directory = None if no_cache else (cache_dir if cache_dir is not None else Path(engine.base_dir) / ".meme-cache")
+        return PlanExecutor(directory).execute(self, engine, preview=preview, release=release, force=force)
 
 
 @dataclass

@@ -18,7 +18,7 @@ python .github/scripts/run_meme_job.py --schema
 `--validate` is offline structural validation. `--expand` resolves sources and
 prints a typed execution plan without rendering or creating scratch directories.
 `--schema` prints JSON Schema generated from the same models used for validation.
-Relative paths resolve against the repository root by default; use `--project-root`
+Relative media/output paths resolve against the current working directory by default; use `--project-root`
 to change it. The example files refer to media you must provide; remote references
 require the existing Stash/Hydrus environment variables and working services.
 
@@ -53,11 +53,46 @@ video profile. New names can be referenced by `style` or `quality` in the job. A
 style preset accepts caption/panel appearance fields except `style`; a quality
 preset must have an `image` and/or `video` `encode`-field map.
 
-Compact jobs always execute: timestamp-only caching is not used, and `--force` is
-unnecessary. `--release` deletes this run's owned scratch directory after success;
-failed jobs also clean their scratch directory. Without release, successful runs
-retain intermediates under `<output-directory>/.meme-scratch/` for inspection.
-Old runs are not deleted automatically. Do not reuse the output path as an input.
+Only compact `meme/v1` jobs are accepted. Legacy operation/pipeline configs and their
+timestamp-only execution path have been removed.
+
+### Persistent Cache and Publication
+
+Jobs execute sequentially through a shared plan executor. Each step is cached under
+`<project-root>/.meme-cache/`. Use `--cache-dir <path>` to change it (relative paths
+are based on `--project-root`), `--force` to rebuild and refresh all steps, or
+`--no-cache` to bypass both cache reads and writes. `--verbose` logs hits and misses.
+
+Cache keys include full SHA-256 input-content hashes, effective parameters after
+preset/CLI expansion, output format, preview mode, resolved font variants, engine
+source and registered handler implementations, Python/platform/package versions,
+and FFmpeg/ffprobe binary fingerprints. Resolved remote paths and marker values are
+refreshed during compilation; a cache hit does not enable offline remote resolution.
+Random scratch paths and output destinations do not affect keys. Changing only a
+later step reuses unchanged earlier results. Hashing large videos adds disk I/O.
+
+Entries contain a checksum manifest, the result, and generated overlay/panel PNGs.
+Checksums are verified on reuse; missing or damaged entries are rebuilt. Results
+are copied, never hard-linked, so editing an output cannot modify its cache entry.
+Completed steps remain cached even when a later step fails. The cache is local,
+trusted data; custom handlers must be source-inspectable and deterministic from
+their declared parameters/dependencies, or callers must use `--no-cache`.
+
+Operations render into this run's scratch workspace. Nonempty declared results are
+published through a temporary file beside the destination followed by an atomic
+replace. A failed render/copy/replace preserves the previous final output; an
+interrupted process may leave temporary files, but does not publish partial output.
+This is per-file atomic visibility, not a transaction across the whole job or a
+guarantee against power loss. Direct low-level engine calls do not use this executor.
+
+`--release` deletes this run's owned scratch directory after success; failed jobs
+also clean their scratch directory. Without release, successful runs retain
+intermediates under `<output-directory>/.meme-scratch/` for inspection, including on
+cache hits. Other runs' scratch directories are never deleted automatically.
+The persistent cache survives release and has no automatic eviction yet; remove
+its directory to reclaim space when no jobs are running. Concurrent execution,
+interprocess cache locking, and concurrent writes to the same output are not yet
+supported. Do not reuse the output path as an input.
 
 The catalog can also be run directly:
 

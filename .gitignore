@@ -13,3 +13,5 @@ wheels/
 media/
 render/
 logs/
+.meme-cache/
+.meme-scratch/
