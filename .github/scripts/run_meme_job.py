@@ -249,6 +249,26 @@ def prepare_config_for_run(config_path: Path, config: Dict[str, Any], project_ro
     return CONFIG_PREPARATION_SERVICE.prepare_config(config, project_root)
 
 
+def cleanup_stale_scratch_dirs(scratch_path: Path, logger: Optional[logging.Logger] = None) -> int:
+    """Remove leftover .meme-scratch job directories orphaned by earlier crashed/killed runs."""
+    import shutil
+
+    scratch_root = scratch_path.parent
+    removed = 0
+    if not scratch_root.is_dir() or scratch_root.name != ".meme-scratch":
+        return removed
+    for entry in scratch_root.iterdir():
+        if entry == scratch_path or not entry.is_dir():
+            continue
+        try:
+            shutil.rmtree(entry)
+            removed += 1
+        except Exception as exc:
+            if logger:
+                logger.warning("stale scratch cleanup failed for %s: %s", entry, exc)
+    return removed
+
+
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -301,6 +321,9 @@ def main() -> None:
                 if args.expand:
                     print(plan.model_dump_json(indent=2))
                 else:
+                    removed = cleanup_stale_scratch_dirs(Path(plan.scratch), logger=logging.getLogger("meme_engine"))
+                    if removed:
+                        print(f"Removed {removed} stale .meme-scratch job directories from earlier runs")
                     print(plan.execute(engine, preview=args.preview_only, release=args.release))
             else:
                 config = prepare_config_for_run(cfg_file, config, project_root)
