@@ -163,6 +163,11 @@ class Crop(Step):
     bottom: Annotated[int, Field(ge=0)] = 0
 
 
+class Flip(Step):
+    op: Literal["flip"]
+    direction: Literal["horizontal", "vertical"] = "horizontal"
+
+
 class TimedText(Appearance):
     text: Nonempty
     start: Nonnegative | None = None
@@ -202,7 +207,7 @@ class Panel(Step, Appearance):
         return self
 
 
-BranchStep = Annotated[Union[Trim, Scale, Crop, Caption, Captions, Panel], Field(discriminator="op")]
+BranchStep = Annotated[Union[Trim, Scale, Crop, Flip, Caption, Captions, Panel], Field(discriminator="op")]
 
 
 class Branch(Model):
@@ -222,7 +227,7 @@ class Stack(Step):
     duration: Positive | None = None
 
 
-JobStep = Annotated[Union[Trim, Scale, Crop, Caption, Captions, Panel, Stack, Concat], Field(discriminator="op")]
+JobStep = Annotated[Union[Trim, Scale, Crop, Flip, Caption, Captions, Panel, Stack, Concat], Field(discriminator="op")]
 
 
 class CompactJob(Model):

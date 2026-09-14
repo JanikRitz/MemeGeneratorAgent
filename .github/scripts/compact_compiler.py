@@ -12,7 +12,7 @@ from typing import Any, Callable
 from pydantic import Field
 
 from compact_jobs import (
-    Appearance, Branch, Caption, Captions, CompactJob, Concat, Crop, Model,
+    Appearance, Branch, Caption, Captions, CompactJob, Concat, Crop, Flip, Model,
     Panel, Presets, Scale, Stack, StashScene, Trim,
 )
 from config_preparation import ConfigPreparationService
@@ -304,6 +304,9 @@ class CompactCompiler:
                     width, height = width - width % 2, height - height % 2
                     if width < 2 or height < 2:
                         raise ValueError("video crop must leave at least 2x2 pixels")
+        elif isinstance(step, Flip):
+            operation = "flip_media"
+            params.update(input_path=media.path, direction=step.direction)
         elif isinstance(step, (Caption, Captions, Panel)):
             duration_override = step.duration or self.job.duration
             if not media.is_video and video:
