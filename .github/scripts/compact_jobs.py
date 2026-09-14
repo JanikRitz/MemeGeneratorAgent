@@ -202,7 +202,7 @@ class Panel(Step, Appearance):
         return self
 
 
-BranchStep = Annotated[Union[Trim, Scale, Crop], Field(discriminator="op")]
+BranchStep = Annotated[Union[Trim, Scale, Crop, Caption, Captions, Panel], Field(discriminator="op")]
 
 
 class Branch(Model):
@@ -217,7 +217,7 @@ class Concat(Step):
 
 class Stack(Step):
     op: Literal["stack"]
-    with_: Source = Field(alias="with")
+    with_: Source | Branch = Field(alias="with")
     direction: Literal["horizontal", "vertical"] = "horizontal"
     duration: Positive | None = None
 
@@ -248,6 +248,10 @@ class CompactJob(Model):
                         for branch_index, branch_step in enumerate(branch.steps):
                             if branch_index and isinstance(branch_step, Trim) and branch_step.marker:
                                 raise ValueError("branch marker trim must be first")
+            if isinstance(step, Stack) and isinstance(step.with_, Branch):
+                for branch_index, branch_step in enumerate(step.with_.steps):
+                    if branch_index and isinstance(branch_step, Trim) and branch_step.marker:
+                        raise ValueError("branch marker trim must be first")
         return self
 
 

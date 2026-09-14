@@ -121,7 +121,7 @@ Output extensions remain explicit: quality must never silently change a file typ
 | `panel` | `text`, `side`, text appearance, optional `ratio`, `pixels`, `auto_size` | `add_text_side_box` |
 | `caption` | `text`, text appearance, optional `start`, `end` | Single-item `apply_multi_text_overlays`, or `generate_text_overlay` for a still-image result |
 | `captions` | `items` array of text/timing entries; shared text appearance on the step | `apply_multi_text_overlays` |
-| `stack` | `with` media reference, optional `direction`, `duration` | `stack_media` |
+| `stack` | `with` media reference or `{input, steps}` branch, optional `direction`, `duration` | `stack_media` |
 | `concat` | Nonempty `with` array of media references or `{input, steps}` branches | `concatenate_clips` with normalized dimensions |
 
 All steps accept `encode` for applicable encoding fields; steps that support a
@@ -131,6 +131,8 @@ override such as `jpeg` or `mp4`. There are no input/output paths on ordinary st
 `panel` defaults to top, automatic sizing, and a minimum size ratio of 0.22.
 `pixels` is fixed sizing and cannot be combined with `ratio` or `auto_size: true`.
 `stack` defaults to horizontal; its first input is the current pipeline media.
+`with` accepts a plain media reference or a branch, exactly like `concat`'s `with`
+entries: `{input, steps}` with the same branch step restrictions and marker rules.
 Other stack behavior, including mixed-media duration, stays with the existing handler.
 
 Map panel `ratio` / `pixels` to `box_size_ratio` / `box_size_px`; keep `auto_size`.

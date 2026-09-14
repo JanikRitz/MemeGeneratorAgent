@@ -235,7 +235,12 @@ class CompactCompiler:
             width = height = None
         other = None
         if isinstance(step, Stack):
-            other = self.source(step.with_, f"{label}.with")
+            if isinstance(step.with_, Branch):
+                other = self.source(step.with_.input, f"{label}.with")
+                for branch_index, branch_step in enumerate(step.with_.steps):
+                    other = self.compile_step(branch_step, other, f"{label}.with.steps[{branch_index}]", original=step.with_.input if branch_index == 0 else None)
+            else:
+                other = self.source(step.with_, f"{label}.with")
             video = video or other.is_video
             width = height = None
         requested_suffix = final.suffix.lower() if final else "." + (step.intermediate_format or ("mp4" if video else "png"))
