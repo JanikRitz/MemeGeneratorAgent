@@ -198,7 +198,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("config_path", nargs="?", help="Path to JSON config (positional)")
     parser.add_argument("--config", help="Path to JSON config")
     parser.add_argument("--presets", type=Path, help="Path to JSON style and quality preset overrides for compact jobs")
-    parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[2], help="Base directory for relative media and output paths")
+    parser.add_argument("--project-root", type=Path, default=Path.cwd(), help="Base directory for relative media and output paths (defaults to the current working directory)")
     parser.add_argument("--example", help="Select a named job from a compact example catalog")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--validate", action="store_true", help="Validate compact job structure without resolving media or rendering")
