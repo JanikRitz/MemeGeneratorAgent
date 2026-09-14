@@ -12,6 +12,8 @@ _REGISTERED_HANDLER_CLASSES: Dict[str, Type[OperationHandler]] = {}
 def register_operation(
     target: Optional[Union[Type[OperationHandler], str]] = None,
     name: Optional[str] = None,
+    *,
+    replace: bool = False,
 ) -> Any:
     """
     Decorator to register an OperationHandler class.
@@ -31,6 +33,8 @@ def register_operation(
         op_name = name or (target if isinstance(target, str) else None) or getattr(cls, "name", None)
         if not op_name:
             raise ValueError("OperationHandler classes must define a non-empty 'name' or pass a name to @register_operation")
+        if op_name in _REGISTERED_HANDLER_CLASSES and not replace:
+            raise ValueError(f"Operation already registered: {op_name}; pass replace=True to override it")
         _REGISTERED_HANDLER_CLASSES[op_name] = cls
         return cls
 
@@ -50,12 +54,14 @@ class OperationRegistry:
         self,
         handler: Union[OperationHandler, Type[OperationHandler], str],
         name: Optional[str] = None,
+        *,
+        replace: bool = False,
     ) -> Any:
         if isinstance(handler, str):
             custom_name = handler
 
             def decorator(cls: Type[OperationHandler]) -> Type[OperationHandler]:
-                self.register(cls, name=custom_name)
+                self.register(cls, name=custom_name, replace=replace)
                 return cls
 
             return decorator
@@ -65,12 +71,16 @@ class OperationRegistry:
             op_name = name or getattr(instance, "name", None) or getattr(handler, "name", None)
             if not op_name:
                 raise ValueError("Handlers must define a non-empty name")
+            if op_name in self._handlers and not replace:
+                raise ValueError(f"Operation already registered: {op_name}; pass replace=True to override it")
             self._handlers[op_name] = instance
             return handler
 
         op_name = name or getattr(handler, "name", None)
         if not op_name:
             raise ValueError("Handlers must define a non-empty name")
+        if op_name in self._handlers and not replace:
+            raise ValueError(f"Operation already registered: {op_name}; pass replace=True to override it")
         self._handlers[op_name] = handler
         return handler
 
@@ -84,19 +94,14 @@ class OperationRegistry:
 def auto_discover_operations() -> None:
     """Dynamically discover and import all operation modules in operations package."""
     operations_dir = Path(__file__).parent
-    for file_path in operations_dir.glob("*.py"):
+    for file_path in sorted(operations_dir.glob("*.py")):
         if file_path.name in ("__init__.py", "base.py", "registry.py"):
             continue
         module_name = file_path.stem
         try:
-            importlib.import_module(f"operations.{module_name}")
-        except ImportError:
-            try:
-                importlib.import_module(f".{module_name}", package=__package__ or "operations")
-            except Exception:
-                pass
-        except Exception:
-            pass
+            importlib.import_module(f".{module_name}", package=__package__)
+        except Exception as exc:
+            raise ImportError(f"Failed to load operation module {module_name}: {exc}") from exc
 
 
 def build_default_registry() -> OperationRegistry:

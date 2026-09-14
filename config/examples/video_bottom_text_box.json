@@ -1,22 +1,22 @@
 {
-  "operation": "add_text_side_box",
-  "params": {
-    "base_media_path": "media/examples/video.mp4",
-    "text_data": "This is a very long text that goes below the video making the format really long\nUsing markdown new lines with double spaces helps formatting\nI don't know if I can manually insert also spaces that make it look *like* the new blocks are indented\nWhat I do know is that **bold** and *italic* formatting still looks a little wonky",
-    "side": "bottom",
-    "output_path": "render/examples/with_bottom_box.mp4",
-    "auto_size": true,
-    "background_color": "#155ca2",
-    "text_align": "left",
-    "text_vertical_align": "top",
-    "text_padding": 12,
-    "font_size": 23,
-    "line_height": 0.7,
-    "paragraph_spacing": 14,
-    "paragraph_indent_px": 10,
-    "stroke_width": 2,
-    "stroke_fill": "#000000",
-    "shadow_enabled": true,
-    "panel_png_name": "bottom_panel"
-  }
+    "format":  "meme/v1",
+    "input":  "media/examples/video.mp4",
+    "output":  "render/examples/with_bottom_box.mp4",
+    "steps":  [
+                  {
+                      "op":  "panel",
+                      "side":  "bottom",
+                      "style":  "meme",
+                      "text":  "This is a very long text that goes below the video making the format really long\nUsing markdown new lines with double spaces helps formatting\nI don\u0027t know if I can manually insert also spaces that make it look *like* the new blocks are indented\nWhat I do know is that **bold** and *italic* formatting still looks a little wonky",
+                      "background":  "#155ca2",
+                      "align":  "left",
+                      "at":  "top",
+                      "padding":  12,
+                      "size":  23,
+                      "line_height":  0.7,
+                      "paragraph_spacing":  14,
+                      "indent":  10,
+                      "stroke":  2
+                  }
+              ]
 }

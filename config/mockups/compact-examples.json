@@ -1,0 +1,242 @@
+{
+  "status": "implemented; select a job with --example <name>, or use config/examples",
+  "presets": {
+    "styles": {
+      "meme": {"size": 40, "align": "center", "at": "center", "padding": 6, "stroke": 3, "stroke_color": "#000000", "shadow": true, "background": "transparent", "line_height": 1.0, "indent": 0},
+      "headline": {"size": 24, "align": "center", "at": "center", "padding": 10, "stroke": 3, "stroke_color": "#000000", "shadow": true, "background": "transparent", "line_height": 1.0, "indent": 0},
+      "meme-compact": {"size": 20, "align": "center", "at": "center", "padding": 8, "stroke": 2, "stroke_color": "#000000", "shadow": true, "background": "transparent", "line_height": 1.0, "indent": 0},
+      "panel": {"size": 72, "align": "center", "at": "center", "padding": 16, "stroke": 0, "stroke_color": "#000000", "shadow": false, "background": "#ffffff", "line_height": 1.0, "indent": 0}
+    },
+    "quality": {
+      "good": {"image": {"image_quality": 82, "optimize": true}, "video": {"crf": 20, "preset": "slow", "bitrate": "3000k", "audio_bitrate": "160k"}},
+      "balanced": {"image": {"image_quality": 42, "optimize": true}, "video": {"crf": 30, "preset": "fast", "bitrate": "1200k", "audio_bitrate": "96k"}},
+      "crunchy": {"image": {"image_quality": 24, "optimize": true}},
+      "super_crunchy": {"image": {"image_quality": 14, "optimize": true}, "video": {"crf": 40, "preset": "veryfast", "bitrate": "380k", "audio_bitrate": "40k"}}
+    }
+  },
+  "additional_examples": {
+    "video_concat": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/concatenated.mp4",
+      "steps": [
+        {"op": "concat", "with": ["media/examples/vertical_video.mp4"]}
+      ]
+    },
+    "video_concat_two_trimmed": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/two_trimmed_clips.mp4",
+      "steps": [
+        {"op": "trim", "start": 2, "end": 6},
+        {"op": "concat", "with": [
+          {"input": "media/examples/vertical_video.mp4", "steps": [
+            {"op": "trim", "start": 10, "end": 13}
+          ]}
+        ]}
+      ]
+    }
+  },
+  "examples": {
+    "crop_media_basic": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/crop_example.mp4",
+      "encode": {"crf": 23, "preset": "medium"},
+      "steps": [{"op": "crop", "left": 100, "right": 100}]
+    },
+    "image_text_overlay": {
+      "format": "meme/v1",
+      "input": "media/examples/vertical_image.png",
+      "output": "render/examples/image_only_overlay.png",
+      "steps": [{"op": "caption", "text": "<b>IMAGE-ONLY MEME</b>\n<span style=\"color:#00ccff\"><i>overlay png matched to source image</i></span>", "at": "bottom", "size": 56, "line_height": 0.95}]
+    },
+    "image_top_text_box": {
+      "format": "meme/v1",
+      "input": "media/examples/image.jpeg",
+      "output": "render/examples/image_top_box.png",
+      "duration": 5,
+      "steps": [{"op": "panel", "text": "[color=#000]Girls be Girls[/color]", "background": "#ff69b4", "size": 128}]
+    },
+    "image_top_text_box_hydrus": {
+      "format": "meme/v1",
+      "input": "hydrus:file_id:21602506",
+      "output": "render/examples/image_top_box_hydrus.png",
+      "duration": 5,
+      "steps": [{"op": "panel", "text": "[color=#000]Hydrus Source[/color]", "background": "#7ad3ff", "size": 128}]
+    },
+    "image_top_text_box_quality_balanced": {
+      "format": "meme/v1",
+      "input": "media/examples/image.jpeg",
+      "output": "render/examples/image_top_box_balanced.jpg",
+      "quality": "balanced",
+      "steps": [{"op": "panel", "text": "[color=#000000]Girls be Girls[/color]", "background": "#ff69b4"}]
+    },
+    "image_top_text_box_quality_crunchy": {
+      "format": "meme/v1",
+      "input": "media/examples/image.jpeg",
+      "output": "render/examples/image_top_box_crunchy.jpg",
+      "quality": "crunchy",
+      "steps": [{"op": "panel", "text": "[color=#000000]Girls be Girls[/color]", "background": "#ff69b4"}]
+    },
+    "image_top_text_box_quality_good": {
+      "format": "meme/v1",
+      "input": "media/examples/image.jpeg",
+      "output": "render/examples/image_top_box_good.jpg",
+      "quality": "good",
+      "steps": [{"op": "panel", "text": "[color=#000000]Girls be Girls[/color]", "background": "#ff69b4"}]
+    },
+    "image_top_text_box_quality_super_crunchy": {
+      "format": "meme/v1",
+      "input": "media/examples/image.jpeg",
+      "output": "render/examples/image_top_box_super_crunchy.jpg",
+      "quality": "super_crunchy",
+      "steps": [{"op": "panel", "text": "[color=#000000]Girls be Girls[/color]", "background": "#ff69b4"}]
+    },
+    "image_top_text_box_stash": {
+      "format": "meme/v1",
+      "input": "stash:image:425270",
+      "output": "render/examples/image_top_box_stash.png",
+      "duration": 5,
+      "steps": [{"op": "panel", "text": "[color=#000]Girls be Girls[/color]", "background": "#ff69b4", "size": 128}]
+    },
+    "pipeline_gif_stash_top_text_box": {
+      "format": "meme/v1",
+      "input": "stash:image:430765",
+      "output": "render/examples/gif_stash_top_box.mp4",
+      "encode": {"crf": 28, "preset": "fast"},
+      "steps": [
+        {"op": "scale", "max_long_side": 640},
+        {"op": "panel", "text": "[color=#000]Not your typical girl[/color]", "background": "#8c9ea0", "size": 64, "font": "C:\\Windows\\Fonts\\IMPACT.ttf"}
+      ]
+    },
+    "pipeline_hydrus_scale_text_overlay": {
+      "format": "meme/v1",
+      "input": "hydrus:file_id:189566595",
+      "output": "render/examples/hydrus_scale_text_overlay.mp4",
+      "encode": {"crf": 32, "preset": "fast", "bitrate": "900k", "audio_bitrate": "64k"},
+      "steps": [
+        {"op": "scale", "max_long_side": 640},
+        {"op": "captions", "style": "headline", "items": [
+          {"text": "**HYDRUS SCALE + OVERLAY**", "at": "top", "size": 28, "end": 6},
+          {"text": "[color=#7ad3ff]Works for GIFs and videos from Hydrus[/color]", "at": "bottom", "end": 6}
+        ]}
+      ]
+    },
+    "pipeline_image_scale_top_text_box": {
+      "format": "meme/v1",
+      "input": "media/examples/image.jpeg",
+      "output": "render/examples/image_top_box_1080.png",
+      "steps": [
+        {"op": "scale", "max_long_side": 1080, "intermediate_format": "jpeg"},
+        {"op": "panel", "text": "[color=#000000]Girls be Girls[/color]", "background": "#ff69b4"}
+      ]
+    },
+    "pipeline_stash_trim_by_marker_scale": {
+      "format": "meme/v1",
+      "input": "stash:scene:1141",
+      "output": "render/examples/stash_trim_by_marker.mp4",
+      "steps": [
+        {"op": "trim", "marker": {"id": 878, "fallback_duration": 2}},
+        {"op": "scale", "max_long_side": 640, "encode": {"crf": 30, "preset": "fast", "bitrate": "1200k", "audio_bitrate": "96k"}}
+      ]
+    },
+    "pipeline_video_trim_scale_multi_overlay": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/video_trim_scale_overlay.mp4",
+      "steps": [
+        {"op": "trim", "start": 1, "end": 6},
+        {"op": "scale", "max_long_side": 640, "encode": {"crf": 34, "preset": "fast", "bitrate": "900k", "audio_bitrate": "64k"}},
+        {"op": "captions", "style": "headline", "encode": {"crf": 36, "preset": "fast", "bitrate": "900k", "audio_bitrate": "64k"}, "items": [
+          {"text": "**TRIM + SCALE + OVERLAY**", "at": "top", "end": 5},
+          {"text": "<span style=\"color:#00ccff\"><i>640 max-long-side target</i></span>", "at": "bottom", "start": 2.2, "end": 5}
+        ]}
+      ]
+    },
+    "pipeline_video_trim_scale_multi_overlay_quality_balanced": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/video_trim_scale_overlay_balanced.mp4",
+      "quality": "balanced",
+      "steps": [
+        {"op": "trim", "start": 1, "end": 6, "encode": {"crf": 28, "bitrate": "1400k"}},
+        {"op": "scale", "max_long_side": 720},
+        {"op": "captions", "style": "headline", "encode": {"bitrate": "1100k"}, "items": [
+          {"text": "**BALANCED QUALITY**", "at": "top", "end": 5},
+          {"text": "<span style=\"color:#00ccff\"><i>middle ground for share size + legibility</i></span>", "at": "bottom", "size": 22, "start": 2, "end": 5}
+        ]}
+      ]
+    },
+    "pipeline_video_trim_scale_multi_overlay_quality_good": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/video_trim_scale_overlay_good.mp4",
+      "quality": "good",
+      "steps": [
+        {"op": "trim", "start": 1, "end": 6, "encode": {"bitrate": "3500k"}},
+        {"op": "scale", "max_long_side": 1280},
+        {"op": "captions", "style": "headline", "encode": {"crf": 19}, "items": [
+          {"text": "**RELATIVELY GOOD QUALITY**", "at": "top", "size": 26, "end": 5},
+          {"text": "<span style=\"color:#00ccff\"><i>cleaner encode, still meme-ready</i></span>", "at": "bottom", "start": 2, "end": 5}
+        ]}
+      ]
+    },
+    "pipeline_video_trim_scale_multi_overlay_quality_super_crunchy": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/video_trim_scale_overlay_super_crunchy.mp4",
+      "quality": "super_crunchy",
+      "steps": [
+        {"op": "trim", "start": 1, "end": 6, "encode": {"crf": 38, "bitrate": "450k", "audio_bitrate": "48k"}},
+        {"op": "scale", "max_long_side": 480},
+        {"op": "captions", "style": "meme-compact", "encode": {"crf": 41, "bitrate": "320k"}, "items": [
+          {"text": "**SUPER CRUNCHY**", "at": "top", "end": 5},
+          {"text": "<span style=\"color:#00ccff\"><i>reposted too many times</i></span>", "at": "bottom", "start": 2, "end": 5}
+        ]}
+      ]
+    },
+    "pipeline_video_trim_then_caption": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/trim_captioned.mp4",
+      "steps": [
+        {"op": "trim", "start": 1, "end": 5},
+        {"op": "captions", "items": [{"text": "**When the build passes**", "at": "bottom", "end": 4, "font": "C:\\Windows\\Fonts\\ARIAL.ttf"}]}
+      ]
+    },
+    "vertical_video_right_text_box": {
+      "format": "meme/v1",
+      "input": "media/examples/vertical_video.mp4",
+      "output": "render/examples/with_right_box.mp4",
+      "steps": [{"op": "panel", "side": "right", "style": "meme", "text": "**MEME CONTEXT**  \nThis side panel keeps the full video visible and wraps long lines automatically.", "background": "#155ca2", "align": "left", "size": 60, "line_height": 1.2, "ratio": 0.5, "stroke": 2}]
+    },
+    "video_bottom_text_box": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/with_bottom_box.mp4",
+      "steps": [{"op": "panel", "side": "bottom", "style": "meme", "text": "This is a very long text that goes below the video making the format really long\nUsing markdown new lines with double spaces helps formatting\nI don't know if I can manually insert also spaces that make it look *like* the new blocks are indented\nWhat I do know is that **bold** and *italic* formatting still looks a little wonky", "background": "#155ca2", "align": "left", "at": "top", "padding": 12, "size": 23, "line_height": 0.7, "paragraph_spacing": 14, "indent": 10, "stroke": 2}]
+    },
+    "video_image_stack_horizontal": {
+      "format": "meme/v1",
+      "input": "media/examples/vertical_video.mp4",
+      "output": "render/examples/stacked.mp4",
+      "steps": [{"op": "stack", "with": "media/examples/vertical_image.png", "duration": 5}]
+    },
+    "video_multi_text_overlay": {
+      "format": "meme/v1",
+      "input": "media/examples/video.mp4",
+      "output": "render/examples/overlayed.mp4",
+      "steps": [{"op": "captions", "size": 52, "items": [
+        {"text": "*TOP TEXT* WOW", "at": "top", "end": 4.5},
+        {"text": "<span style=\"color:#00ccff\"><i>bottom text</i></span>", "at": "bottom", "start": 3.5, "end": 7}
+      ]}]
+    },
+    "video_trim": {
+      "format": "meme/v1",
+      "input": "media/examples/vertical_video.mp4",
+      "output": "render/examples/trimmed_vertical.mp4",
+      "steps": [{"op": "trim", "start": 2, "end": 8.5}]
+    }
+  }
+}

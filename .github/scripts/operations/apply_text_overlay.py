@@ -107,4 +107,6 @@ class ApplyTextOverlayOperation(OperationHandler):
             video_preset=params.get("video_preset"),
             video_bitrate=params.get("video_bitrate"),
             audio_bitrate=params.get("audio_bitrate"),
+            video_codec=params.get("video_codec"),
+            threads=int(params["threads"]) if params.get("threads") is not None else None,
         )

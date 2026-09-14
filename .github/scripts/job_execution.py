@@ -19,6 +19,8 @@ except ImportError:
 class JobExecutionService:
     """Execute config steps using dependency injection for the operation registry."""
 
+    _ENCODING_OVERRIDE_KEYS = ("video_codec", "threads", "video_crf", "video_preset")
+
     def __init__(
         self,
         registry: Optional[OperationRegistry] = None,
@@ -26,7 +28,9 @@ class JobExecutionService:
         cleanup_service: Optional[ArtifactCleanupService] = None,
     ) -> None:
         self.registry = registry or build_default_registry()
-        self.engine_factory = engine_factory or (lambda base_dir, logger: MemeEngine(base_dir=base_dir, logger=logger))
+        self.engine_factory = engine_factory or (
+            lambda base_dir, logger: MemeEngine(base_dir=base_dir, logger=logger, registry=self.registry)
+        )
         self.cleanup_service = cleanup_service or ArtifactCleanupService()
 
     def _replace_last_output(self, value: Any, last_output: str) -> Any:
@@ -68,11 +72,7 @@ class JobExecutionService:
             last_output=last_output,
         )
 
-        handler = self.registry.get(operation)
-        if handler is None:
-            raise ValueError(f"Unsupported operation: {operation}")
-
-        return handler.execute(engine, params, context)
+        return engine.execute(operation, params, context)
 
     def execute_config(
         self,
@@ -81,15 +81,11 @@ class JobExecutionService:
         args: argparse.Namespace,
         logger: logging.Logger,
     ) -> str:
-        cli_overrides: Dict[str, Any] = {}
-        if getattr(args, "video_codec", None) is not None:
-            cli_overrides["video_codec"] = args.video_codec
-        if getattr(args, "threads", None) is not None:
-            cli_overrides["threads"] = args.threads
-        if getattr(args, "video_crf", None) is not None:
-            cli_overrides["video_crf"] = args.video_crf
-        if getattr(args, "video_preset", None) is not None:
-            cli_overrides["video_preset"] = args.video_preset
+        cli_overrides = {
+            key: getattr(args, key)
+            for key in self._ENCODING_OVERRIDE_KEYS
+            if getattr(args, key, None) is not None
+        }
 
         if "pipeline" in config:
             logger.info("Running pipeline with %s steps", len(config["pipeline"]))
@@ -134,7 +130,12 @@ class JobExecutionService:
         generated_files = generated_path_collector(config) if generated_path_collector else set()
         output_path = output_path_resolver(config) if output_path_resolver else None
 
-        if output_path and output_path.exists() and output_path.stat().st_mtime > config_path.stat().st_mtime:
+        force_execution = (
+            getattr(args, "force", False)
+            or args.preview_only
+            or any(getattr(args, key, None) is not None for key in self._ENCODING_OVERRIDE_KEYS)
+        )
+        if not force_execution and output_path and output_path.exists() and output_path.stat().st_mtime > config_path.stat().st_mtime:
             if args.release:
                 removed = self.cleanup_service.cleanup_files(generated_files, keep_path=output_path, logger=effective_logger)
                 if removed:

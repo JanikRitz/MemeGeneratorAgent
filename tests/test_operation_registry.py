@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
@@ -24,6 +25,37 @@ class DummyHandler(OperationHandler):
 
 
 class OperationRegistryTests(unittest.TestCase):
+    def test_duplicate_names_require_explicit_replacement(self):
+        for as_class in (False, True):
+            with self.subTest(as_class=as_class):
+                registry = OperationRegistry()
+                registry.register(DummyHandler())
+                replacement = DummyHandler if as_class else DummyHandler()
+                with self.assertRaisesRegex(ValueError, "already registered: dummy"):
+                    registry.register(replacement)
+                registry.register(replacement, replace=True)
+                self.assertIsInstance(registry.get("dummy"), DummyHandler)
+
+    def test_global_decorator_requires_explicit_replacement(self):
+        with patch("operations.registry._REGISTERED_HANDLER_CLASSES", {}):
+            register_operation(DummyHandler)
+            with self.assertRaisesRegex(ValueError, "already registered: dummy"):
+                register_operation(DummyHandler)
+            self.assertIs(register_operation(DummyHandler, replace=True), DummyHandler)
+
+    def test_named_registry_decorator_supports_explicit_replacement(self):
+        registry = OperationRegistry()
+        registry.register(DummyHandler())
+        registry.register("dummy", replace=True)(DummyHandler)
+        self.assertIsInstance(registry.get("dummy"), DummyHandler)
+
+    def test_discovery_reports_module_import_failures(self):
+        failure = RuntimeError("broken plugin")
+        with patch("operations.registry.importlib.import_module", side_effect=failure):
+            with self.assertRaisesRegex(ImportError, "Failed to load operation module .*broken plugin") as raised:
+                auto_discover_operations()
+        self.assertIs(raised.exception.__cause__, failure)
+
     def test_custom_registry_registers_and_resolves_handlers(self):
         registry = OperationRegistry()
         registry.register(DummyHandler())

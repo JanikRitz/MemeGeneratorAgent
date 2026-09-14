@@ -61,6 +61,8 @@ class CropMediaOperation(OperationHandler):
                     new_w -= 1
                 if new_h % 2 != 0:
                     new_h -= 1
+                if new_w < 2 or new_h < 2:
+                    raise ValueError("Video crop must leave at least 2x2 pixels")
                 from moviepy.video.VideoClip import VideoClip
 
                 def _crop_frame(t):
@@ -68,6 +70,7 @@ class CropMediaOperation(OperationHandler):
                     return frame[top_px:new_h + top_px, left_px:new_w + left_px]
 
                 cropped = VideoClip(frame_function=_crop_frame, duration=clip.duration, is_mask=clip.is_mask)
+                cropped = engine._clip_with_audio(cropped, clip.audio)
                 fps = float(getattr(clip, "fps", 24) or 24)
                 engine._write_video(
                     cropped,
@@ -93,6 +96,6 @@ class CropMediaOperation(OperationHandler):
             if crop_left + crop_right >= w or crop_top + crop_bottom >= h:
                 raise ValueError(f"Crop removes entire image: source={w}x{h}, left={crop_left} right={crop_right} top={crop_top} bottom={crop_bottom}")
             cropped = img.crop((crop_left, crop_top, w - crop_right, h - crop_bottom))
-            engine._save_image(cropped, actual_out_p)
+            engine._save_image(cropped, actual_out_p, image_quality=params.get("image_quality"), png_compress_level=params.get("png_compress_level"), optimize=params.get("optimize"))
         engine.logger.info("crop_media image input=%s source=%sx%s output=%sx%s left=%d right=%d top=%d bottom=%d", in_p, w, h, cropped.width, cropped.height, crop_left, crop_right, crop_top, crop_bottom)
         return str(actual_out_p)

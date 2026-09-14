@@ -4,6 +4,15 @@ This document outlines planned improvements for `MemeEngine`, categorized into p
 
 ---
 
+## Execution Reliability Review: First Batch [COMPLETED]
+- Single text overlays preserve codec and thread overrides when delegating to multi-overlay rendering.
+- Runner-created engines share the runner registry; top-level and nested operations dispatch through the engine. A custom engine factory owns its engine's registry.
+- `--force`, `--preview-only`, and explicit encoder overrides bypass the output-newer-than-config shortcut. Source-aware cache fingerprints remain follow-up work.
+- Operation discovery reports import failures. Duplicate names require `replace=True` through the registry, registration decorator, or engine registration helper.
+- Require MoviePy 2.x or newer to match the operation APIs; correct the duration helper's legacy fallback without claiming full MoviePy 1.x support.
+- **Verification**: Run `python -m unittest discover -s tests -v` and a short trim/scale/text-overlay pipeline with `--video-codec libx264 --threads 1 --force`.
+- **Next**: Typed whole-job validation; artifact manifests and resource cleanup; consistent CLI root discovery, logging, and batch failure status. Compact authoring remains deferred below, and encode fusion is a separate performance project.
+
 ## Pillar 1: Performance & Resource Management
 
 ### 1. Font Resolution & Loading Caching [COMPLETED]
@@ -96,6 +105,15 @@ This document outlines planned improvements for `MemeEngine`, categorized into p
 ---
 
 ## Pillar 4: Developer Experience & Quality Assurance
+
+### Compact Job Authoring Format [IMPLEMENTED]
+- **Goal**: Let users and local LLMs author small jobs that deterministically compile into a typed, validated execution plan. Prioritize the new implementation over legacy support: this is an alpha project, and breaking changes are acceptable when they simplify the design.
+- **Design**: Top-level input/output and quality preset; concise steps such as trim, scale, and caption; named text styles; automatic previous-step wiring and managed intermediate paths.
+- **Precedence**: Built-in defaults < job defaults < step settings < CLI overrides.
+- **Supporting Work**: Generate JSON Schema and operation-specific examples from parameter models. Add validation and dry-run commands that show expanded jobs and errors with precise field paths.
+- **Verification**: Test new behavior, override precedence, invalid fields, intermediate paths, and rendering. Use existing examples for feature coverage; backward compatibility is not a requirement.
+- **Status**: Implemented strict Pydantic models, typed execution plans, media-specific expansion, style/encoding precedence, independently trimmed concat branches, normalized concat rendering, owned scratch cleanup, and CLI validation/expansion/schema commands. All 23 original examples migrated; two concat examples added. Usage: [docs/compact-format.md](docs/compact-format.md). Catalog: [config/mockups/compact-examples.json](config/mockups/compact-examples.json).
+- **Verification Command**: `python -m unittest discover -s tests -v`; `python .github/scripts/run_meme_job.py config/examples --validate`.
 
 ### 10. Standardize Execution & Environment Management via `uv`
 - **Goal**: Enforce `uv` across all development workflows for environment isolation, script execution, and test execution.

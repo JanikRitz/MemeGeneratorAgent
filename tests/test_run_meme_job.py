@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 import sys
 import tempfile
 import unittest
@@ -10,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "script
 import run_meme_job
 from artifact_cleanup import ArtifactCleanupService
 from config_preparation import ConfigPreparationService
+from job_execution import JobExecutionService
+from operations.base import OperationHandler
+from operations.registry import OperationRegistry
 
 
 class ConfigPreparationServiceTests(unittest.TestCase):
@@ -47,6 +52,79 @@ class ArtifactCleanupServiceTests(unittest.TestCase):
 
 
 class RunMemeJobScriptTests(unittest.TestCase):
+    def test_single_overlay_forwards_encoder_overrides(self):
+        from unittest.mock import MagicMock
+        from job_execution import JobExecutionService
+
+        service = JobExecutionService()
+        engine = service.engine_factory(".", MagicMock())
+        args = run_meme_job.build_arg_parser().parse_args(
+            ["config.json", "--video-codec", "libx264", "--threads", "4"]
+        )
+        config = {
+            "operation": "apply_text_overlay",
+            "params": {"input_path": "in.mp4", "output_path": "out.mp4", "text": "Caption"},
+        }
+
+        with patch.object(engine, "apply_multi_text_overlays") as apply_overlays:
+            service.execute_config(config, engine, args, engine.logger)
+
+        forwarded = apply_overlays.call_args.kwargs
+        self.assertEqual(forwarded["video_codec"], "libx264")
+        self.assertEqual(forwarded["threads"], 4)
+
+    def test_runner_and_nested_calls_use_shared_registry(self):
+        class NestedHandler(OperationHandler):
+            name = "nested"
+
+            def execute(self, engine, params, context):
+                return engine.execute("leaf", params, context)
+
+        class LeafHandler(OperationHandler):
+            name = "leaf"
+
+            def execute(self, engine, params, context):
+                return "custom-result"
+
+        registry = OperationRegistry()
+        registry.register(NestedHandler())
+        registry.register(LeafHandler())
+        service = JobExecutionService(registry=registry)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            engine = service.engine_factory(tmp_dir, logging.getLogger("test"))
+            self.assertIs(engine.registry, registry)
+            self.assertEqual(service.execute_step(engine, {"operation": "nested"}), "custom-result")
+
+    def test_explicit_cli_options_bypass_newer_output_skip(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            config_path = root / "job.json"
+            output_path = root / "out.mp4"
+            config_path.touch()
+            output_path.touch()
+            os.utime(config_path, (1000, 1000))
+            os.utime(output_path, (2000, 2000))
+            config = {"operation": "trim_video", "params": {"output_path": str(output_path)}}
+            cases = [
+                ([], False),
+                (["--force"], True),
+                (["--preview-only"], True),
+                (["--video-codec", "libx264"], True),
+                (["--threads", "4"], True),
+                (["--video-crf", "18"], True),
+                (["--video-preset", "fast"], True),
+            ]
+            for options, should_execute in cases:
+                with self.subTest(options=options):
+                    args = run_meme_job.build_arg_parser().parse_args([str(config_path), *options])
+                    service = JobExecutionService()
+                    with patch.object(service, "execute_config", return_value=str(output_path)) as execute:
+                        self.assertTrue(service.run_config_file(
+                            config_path, config, root, args,
+                            output_path_resolver=run_meme_job.get_output_path_from_config,
+                        ))
+                    self.assertEqual(execute.called, should_execute)
+
     def test_main_passes_release_cleanup_hooks_to_runner(self):
         class FakeJobExecutionService:
             def __init__(self):
@@ -106,8 +184,8 @@ class RunMemeJobScriptTests(unittest.TestCase):
         from job_execution import JobExecutionService
 
         service = JobExecutionService()
-        mock_engine = MagicMock()
         mock_logger = MagicMock()
+        mock_engine = service.engine_factory(".", mock_logger)
         mock_handler = MagicMock()
         mock_handler.execute.return_value = "render/out.mp4"
 

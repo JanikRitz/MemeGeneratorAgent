@@ -65,8 +65,8 @@ class MemeEngine:
     def _build_default_registry(self) -> OperationRegistry:
         return build_default_registry()
 
-    def register_operation(self, handler) -> None:
-        self.registry.register(handler)
+    def register_operation(self, handler, *, replace: bool = False) -> None:
+        self.registry.register(handler, replace=replace)
 
     def list_operations(self) -> List[str]:
         return self.registry.list()
@@ -171,7 +171,7 @@ class MemeEngine:
     def _clip_with_duration(self, clip, duration: float):
         if hasattr(clip, "with_duration"):
             return clip.with_duration(duration)
-        return clip.with_duration(duration)
+        return clip.set_duration(duration)
 
     def _clip_with_audio(self, clip, audio_clip):
         if audio_clip is None:

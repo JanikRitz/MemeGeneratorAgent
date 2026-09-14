@@ -10,6 +10,15 @@ from operations.utility_ops import WriteVideoOperation
 
 
 class WriteVideoOperationTests(unittest.TestCase):
+    def test_audio_temporary_paths_are_unique_and_beside_output(self):
+        handler = WriteVideoOperation()
+        clip = MagicMock()
+        for _ in range(2):
+            handler.execute(MagicMock(), {"clip": clip, "output_path": "render/out.mp4"}, MagicMock())
+        paths = [Path(call.kwargs["temp_audiofile"]) for call in clip.write_videofile.call_args_list]
+        self.assertNotEqual(paths[0], paths[1])
+        self.assertEqual(paths[0].parent, Path("render"))
+
     def test_write_video_defaults_to_h264_nvenc(self):
         handler = WriteVideoOperation()
         mock_clip = MagicMock()

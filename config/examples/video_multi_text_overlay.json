@@ -1,27 +1,24 @@
 {
-  "operation": "apply_multi_text_overlays",
-  "params": {
-    "base_media_path": "media/examples/video.mp4",
-    "output_path": "render/examples/overlayed.mp4",
-    "overlays": [
-      {
-        "overlay_name": "headline",
-        "text": "*TOP TEXT* WOW",
-        "start_time": 0.0,
-        "end_time": 4.5,
-        "text_align": "center",
-        "text_vertical_align": "top",
-        "font_size": 52
-      },
-      {
-        "overlay_name": "subline",
-        "text": "<span style=\"color:#00ccff\"><i>bottom text</i></span>",
-        "start_time": 3.5,
-        "end_time": 7.0,
-        "text_align": "center",
-        "text_vertical_align": "bottom",
-        "font_size": 52
-      }
-    ]
-  }
+    "format":  "meme/v1",
+    "input":  "media/examples/video.mp4",
+    "output":  "render/examples/overlayed.mp4",
+    "steps":  [
+                  {
+                      "op":  "captions",
+                      "size":  52,
+                      "items":  [
+                                    {
+                                        "text":  "*TOP TEXT* WOW",
+                                        "at":  "top",
+                                        "end":  4.5
+                                    },
+                                    {
+                                        "text":  "\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003ebottom text\u003c/i\u003e\u003c/span\u003e",
+                                        "at":  "bottom",
+                                        "start":  3.5,
+                                        "end":  7
+                                    }
+                                ]
+                  }
+              ]
 }

@@ -197,10 +197,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run MemeEngine jobs from a JSON config file.")
     parser.add_argument("config_path", nargs="?", help="Path to JSON config (positional)")
     parser.add_argument("--config", help="Path to JSON config")
+    parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[2], help="Base directory for relative media and output paths")
+    parser.add_argument("--example", help="Select a named job from a compact example catalog")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--validate", action="store_true", help="Validate compact job structure without resolving media or rendering")
+    mode.add_argument("--expand", action="store_true", help="Print the resolved compact execution plan without rendering")
+    mode.add_argument("--schema", action="store_true", help="Print the compact job JSON Schema; no config required")
     parser.add_argument(
         "--preview-only",
         action="store_true",
-        help="Force preview-only mode for add_text_side_box operations, overriding config",
+        help="Force preview-only mode for operations that support it, overriding config",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Run even when the output is newer than the config",
     )
     parser.add_argument(
         "--release",
@@ -241,38 +252,55 @@ def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
 
+    if args.schema:
+        from compact_jobs import CompactJob
+        print(json.dumps(CompactJob.model_json_schema(), indent=2))
+        return
+
     config_arg = args.config or args.config_path
     if not config_arg:
         parser.error("Provide --config <path> or a positional config path")
 
     config_path = Path(config_arg)
-    if config_path.is_dir():
-        config_files = sorted(config_path.glob("*.json"))
-        if not config_files:
-            print(f"No JSON config files found in {config_path}")
-            return
-
-        project_root = config_path.resolve().parents[1]
-        for cfg_file in config_files:
-            try:
-                config = prepare_config_for_run(cfg_file, load_config_file(cfg_file), project_root)
-            except Exception as exc:
-                err_msg = str(exc).strip() or repr(exc)
-                print(f"Error preparing {cfg_file}: {err_msg}")
-                continue
-
-            run_config_file(cfg_file, config, project_root, args)
-        return
-
-    try:
-        config = prepare_config_for_run(config_path, load_config_file(config_path), Path(config_path).resolve().parents[2])
-    except Exception as exc:
-        err_msg = str(exc).strip() or repr(exc)
-        print(f"Error preparing {config_path}: {err_msg}")
-        sys.exit(1)
-
-    success = run_config_file(config_path, config, Path(config_path).resolve().parents[2], args)
-    if not success:
+    config_files = sorted(config_path.glob("*.json")) if config_path.is_dir() else [config_path]
+    if not config_files:
+        parser.error(f"No JSON config files found in {config_path}")
+    if args.expand and len(config_files) > 1:
+        parser.error("--expand requires one config file")
+    project_root = args.project_root.resolve()
+    if not project_root.is_dir():
+        parser.error("--project-root must be an existing directory")
+    failed = False
+    for cfg_file in config_files:
+        try:
+            config = load_config_file(cfg_file)
+            if args.example:
+                examples = {**config.get("examples", {}), **config.get("additional_examples", {})}
+                if args.example not in examples:
+                    raise ValueError(f"Unknown example: {args.example}")
+                config = examples[args.example]
+            if "format" in config or "steps" in config or args.validate or args.expand:
+                from compact_jobs import validate_job
+                from compact_compiler import CompactCompiler
+                job = validate_job(config)
+                if args.validate:
+                    print(f"Valid: {cfg_file}" + (f" ({args.example})" if args.example else ""))
+                    continue
+                engine = JOB_EXECUTION_SERVICE.engine_factory(str(project_root), logging.getLogger("meme_engine"))
+                overrides = {"codec": args.video_codec, "crf": args.video_crf, "preset": args.video_preset, "threads": args.threads}
+                plan = CompactCompiler(project_root, engine).compile(job, preview=args.preview_only, overrides=overrides)
+                if args.expand:
+                    print(plan.model_dump_json(indent=2))
+                else:
+                    print(plan.execute(engine, preview=args.preview_only, release=args.release))
+            else:
+                config = prepare_config_for_run(cfg_file, config, project_root)
+                if not run_config_file(cfg_file, config, project_root, args):
+                    failed = True
+        except Exception as exc:
+            print(f"Error in {cfg_file}: {str(exc).strip() or repr(exc)}", file=sys.stderr)
+            failed = True
+    if failed:
         sys.exit(1)
 
 

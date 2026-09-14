@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from contextlib import ExitStack
 from typing import Any, Dict, Optional
 
 from .base import OperationContext, OperationHandler
@@ -65,6 +66,10 @@ class StackMediaImplOperation(OperationHandler):
             raise ValueError(f"Missing required params: {', '.join(missing)}")
 
     def execute(self, engine: Any, params: Dict[str, Any], context: OperationContext) -> str:
+        with ExitStack() as resources:
+            return self._execute(engine, params, context, resources)
+
+    def _execute(self, engine: Any, params: Dict[str, Any], context: OperationContext, resources: ExitStack) -> str:
         self.validate(params)
         p1 = engine.resolve_path(params["path1"])
         p2 = engine.resolve_path(params["path2"])
@@ -78,7 +83,9 @@ class StackMediaImplOperation(OperationHandler):
             from moviepy import ImageClip, VideoFileClip, clips_array
 
         clip1 = VideoFileClip(str(p1)) if engine._is_video(p1) else ImageClip(str(p1)).with_duration(duration_sec)
+        resources.callback(clip1.close)
         clip2 = VideoFileClip(str(p2)) if engine._is_video(p2) else ImageClip(str(p2)).with_duration(duration_sec)
+        resources.callback(clip2.close)
 
         if clip1.duration != clip2.duration:
             duration = max(clip1.duration, clip2.duration)
@@ -97,6 +104,7 @@ class StackMediaImplOperation(OperationHandler):
             grid = [[clip1], [clip2]]
 
         final_clip = clips_array(grid)
+        resources.callback(final_clip.close)
         fps = float(getattr(clip1, "fps", getattr(clip2, "fps", 24)) or 24)
         engine._write_video(
             final_clip,

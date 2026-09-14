@@ -1,32 +1,23 @@
 {
-  "pipeline": [
-    {
-      "operation": "trim_video",
-      "params": {
-        "input_path": "media/examples/video.mp4",
-        "start_sec": 1.0,
-        "end_sec": 5.0,
-        "output_path": "render/examples/trimmed_video.mp4"
-      }
-    },
-    {
-      "operation": "apply_multi_text_overlays",
-      "params": {
-        "base_media_path": "$last_output",
-        "output_path": "render/examples/trim_captioned.mp4",
-        "overlays": [
-          {
-            "overlay_name": "trim_bottom",
-            "text": "**When the build passes**",
-            "start_time": 0.0,
-            "end_time": 4.0,
-            "match_base_size": true,
-            "text_align": "center",
-            "text_vertical_align": "bottom",
-            "font_path": "C:\\Windows\\Fonts\\ARIAL.ttf"
-          }
-        ]
-      }
-    }
-  ]
+    "format":  "meme/v1",
+    "input":  "media/examples/video.mp4",
+    "output":  "render/examples/trim_captioned.mp4",
+    "steps":  [
+                  {
+                      "op":  "trim",
+                      "start":  1,
+                      "end":  5
+                  },
+                  {
+                      "op":  "captions",
+                      "items":  [
+                                    {
+                                        "text":  "**When the build passes**",
+                                        "at":  "bottom",
+                                        "end":  4,
+                                        "font":  "C:\\Windows\\Fonts\\ARIAL.ttf"
+                                    }
+                                ]
+                  }
+              ]
 }

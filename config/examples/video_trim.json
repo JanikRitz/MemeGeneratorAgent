@@ -1,9 +1,12 @@
 {
-  "operation": "trim_video",
-  "params": {
-    "input_path": "media/examples/vertical_video.mp4",
-    "start_sec": 2.0,
-    "end_sec": 8.5,
-    "output_path": "render/examples/trimmed_vertical.mp4"
-  }
+    "format":  "meme/v1",
+    "input":  "media/examples/vertical_video.mp4",
+    "output":  "render/examples/trimmed_vertical.mp4",
+    "steps":  [
+                  {
+                      "op":  "trim",
+                      "start":  2,
+                      "end":  8.5
+                  }
+              ]
 }

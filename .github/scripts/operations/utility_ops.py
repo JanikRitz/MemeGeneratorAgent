@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image
@@ -28,6 +29,7 @@ class WriteVideoOperation(OperationHandler):
         write_kwargs: Dict[str, Any] = {
             "codec": video_codec,
             "audio_codec": params.get("audio_codec", "aac"),
+            "temp_audiofile": str(output_path_path.parent / f".{output_path_path.stem}-{uuid.uuid4().hex}.m4a"),
         }
         if params.get("fps") is not None:
             write_kwargs["fps"] = float(params["fps"])
@@ -46,7 +48,10 @@ class WriteVideoOperation(OperationHandler):
         if ffmpeg_params:
             write_kwargs["ffmpeg_params"] = ffmpeg_params
 
-        clip.write_videofile(str(output_path_path), **write_kwargs)
+        try:
+            clip.write_videofile(str(output_path_path), **write_kwargs)
+        finally:
+            Path(write_kwargs["temp_audiofile"]).unlink(missing_ok=True)
 
     def _build_ffmpeg_params(
         self,

@@ -1,13 +1,14 @@
 {
-  "operation": "generate_text_overlay",
-  "params": {
-    "text_data": "<b>IMAGE-ONLY MEME</b>\n<span style=\"color:#00ccff\"><i>overlay png matched to source image</i></span>",
-    "media_path": "media/examples/vertical_image.png",
-    "compose_on_media": true,
-    "output_path": "render/examples/image_only_overlay.png",
-    "horizontal_align": "center",
-    "vertical_align": "bottom",
-    "font_size": 56,
-    "line_height": 0.95
-  }
+    "format":  "meme/v1",
+    "input":  "media/examples/vertical_image.png",
+    "output":  "render/examples/image_only_overlay.png",
+    "steps":  [
+                  {
+                      "op":  "caption",
+                      "text":  "\u003cb\u003eIMAGE-ONLY MEME\u003c/b\u003e\n\u003cspan style=\"color:#00ccff\"\u003e\u003ci\u003eoverlay png matched to source image\u003c/i\u003e\u003c/span\u003e",
+                      "at":  "bottom",
+                      "size":  56,
+                      "line_height":  0.95
+                  }
+              ]
 }

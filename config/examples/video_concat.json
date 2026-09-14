@@ -1,0 +1,8 @@
+{
+  "format": "meme/v1",
+  "input": "media/examples/video.mp4",
+  "output": "render/examples/concatenated.mp4",
+  "steps": [
+    {"op": "concat", "with": ["media/examples/vertical_video.mp4"]}
+  ]
+}

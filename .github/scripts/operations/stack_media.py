@@ -33,7 +33,8 @@ class StackMediaOperation(OperationHandler):
         path2 = params["path2"]
         out_p = engine.resolve_output_path(params["output_path"])
 
-        if preview_only:
+        still_output = not engine._is_video(engine.resolve_path(path1)) and not engine._is_video(engine.resolve_path(path2)) and out_p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+        if preview_only or still_output:
             p1 = engine.resolve_path(path1)
             p2 = engine.resolve_path(path2)
             if engine._is_video(p1):
@@ -66,8 +67,8 @@ class StackMediaOperation(OperationHandler):
                 composite.paste(img1, (0, 0))
                 composite.paste(img2, (0, img1.height))
 
-            preview_path = out_p.with_suffix(".png")
-            engine._save_image(composite, preview_path)
+            preview_path = out_p.with_suffix(".png") if preview_only else out_p
+            engine._save_image(composite, preview_path, image_quality=params.get("image_quality"), png_compress_level=params.get("png_compress_level"), optimize=params.get("optimize"))
             engine.logger.info("stack_media preview_only: wrote composite preview to %s", preview_path)
             return str(preview_path)
 
@@ -81,4 +82,6 @@ class StackMediaOperation(OperationHandler):
             video_preset=params.get("video_preset"),
             video_bitrate=params.get("video_bitrate"),
             audio_bitrate=params.get("audio_bitrate"),
+            video_codec=params.get("video_codec"),
+            threads=params.get("threads"),
         )

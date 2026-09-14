@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contextlib import ExitStack
 
 from pathlib import Path
 from typing import Any, Dict
@@ -25,6 +26,10 @@ class AddTextSideBoxOperation(OperationHandler):
             raise ValueError(f"Missing required params: {', '.join(missing)}")
 
     def execute(self, engine: Any, params: Dict[str, Any], context: OperationContext) -> str:
+        with ExitStack() as resources:
+            return self._execute(engine, params, context, resources)
+
+    def _execute(self, engine: Any, params: Dict[str, Any], context: OperationContext, resources: ExitStack) -> str:
         self.validate(params)
         preview_only = bool(params.get("preview_only", False))
         if context.preview_only_override is not None:
@@ -47,13 +52,14 @@ class AddTextSideBoxOperation(OperationHandler):
             base_clip = None
             duration = float(params.get("output_duration_sec") or media_info.get("duration_sec") or 5.0)
         elif media_is_video:
-            base_clip = VideoFileClip(str(base_path))
+            base_clip = resources.enter_context(VideoFileClip(str(base_path)))
             duration = float(base_clip.duration)
             base_w = int(base_clip.w)
             base_h = int(base_clip.h)
         else:
             duration = float(params.get("output_duration_sec") or 5.0)
             base_clip = engine._clip_with_duration(ImageClip(str(base_path)), duration)
+            resources.callback(base_clip.close)
             base_w = int(base_clip.w)
             base_h = int(base_clip.h)
 
@@ -196,7 +202,9 @@ class AddTextSideBoxOperation(OperationHandler):
 
         base_layer = engine._clip_with_position(base_clip, base_position)
         panel_layer = engine._clip_with_position(engine._clip_with_duration(ImageClip(str(panel_png_path)), duration), panel_position)
+        resources.callback(panel_layer.close)
         composite = CompositeVideoClip([base_layer, panel_layer], size=(final_w, final_h))
+        resources.callback(composite.close)
         composite = engine._clip_with_audio(composite, getattr(base_clip, "audio", None))
         engine.logger.info("add_text_side_box base=%s side=%s panel=%sx%s final=%sx%s auto_size=%s output=%s panel_png=%s", base_path, side_value, panel_w, panel_h, final_w, final_h, bool(params.get("auto_size", True)), out_p, panel_png_path)
         fps = 24.0 if not media_is_video else float(getattr(base_clip, "fps", 24) or 24)

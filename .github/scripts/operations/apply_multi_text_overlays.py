@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from contextlib import ExitStack
 from typing import Any, Dict, List
 
 from PIL import Image
@@ -25,6 +26,10 @@ class ApplyMultiTextOverlaysOperation(OperationHandler):
             raise ValueError(f"Missing required params: {', '.join(missing)}")
 
     def execute(self, engine: Any, params: Dict[str, Any], context: OperationContext) -> str:
+        with ExitStack() as resources:
+            return self._execute(engine, params, context, resources)
+
+    def _execute(self, engine: Any, params: Dict[str, Any], context: OperationContext, resources: ExitStack) -> str:
         self.validate(params)
         preview_only = bool(params.get("preview_only", False))
         if context.preview_only_override is not None:
@@ -106,7 +111,7 @@ class ApplyMultiTextOverlaysOperation(OperationHandler):
         overlay_root = engine.resolve_output_path(overlay_dir)
         overlay_root.mkdir(parents=True, exist_ok=True)
         if media_is_video:
-            base_clip = VideoFileClip(str(base_path))
+            base_clip = resources.enter_context(VideoFileClip(str(base_path)))
             composition_duration = base_clip.duration
             base_w = int(base_clip.w)
             base_h = int(base_clip.h)
@@ -114,6 +119,7 @@ class ApplyMultiTextOverlaysOperation(OperationHandler):
             max_overlay_end = max((float(item.get("end_time", 3.0)) for item in params["overlays"]), default=3.0)
             duration = params.get("output_duration_sec") or max_overlay_end
             base_clip = ImageClip(str(base_path)).with_duration(duration)
+            resources.callback(base_clip.close)
             composition_duration = duration
             base_w = int(base_clip.w)
             base_h = int(base_clip.h)
@@ -174,10 +180,12 @@ class ApplyMultiTextOverlaysOperation(OperationHandler):
             if metrics.get("overflowed"):
                 engine.logger.warning("overlay index=%s truncated text: png=%s rendered_lines=%s total_lines=%s truncated_lines=%s", index, overlay_path, metrics.get("rendered_lines"), metrics.get("total_lines"), metrics.get("truncated_lines"))
             overlay_clip = engine._clip_with_position(engine._clip_with_end(engine._clip_with_start(ImageClip(str(overlay_path)), start_time), end_time), position)
+            resources.callback(overlay_clip.close)
             layered_clips.append(overlay_clip)
             engine.logger.info("overlay index=%s png=%s start=%s end=%s position=%s text_align=%s text_v_align=%s", index, overlay_path, start_time, end_time, position, text_align, text_vertical_align)
 
         composed = CompositeVideoClip(layered_clips)
+        resources.callback(composed.close)
         fps = 24.0 if not media_is_video else float(getattr(base_clip, "fps", 24) or 24)
         engine._write_video(
             composed,

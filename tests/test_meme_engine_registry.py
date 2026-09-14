@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
 
@@ -82,6 +83,15 @@ class DispatchingMultiTextOverlaysHandler(OperationHandler):
 
 
 class MemeEngineRegistryTests(unittest.TestCase):
+    def test_duration_helper_supports_modern_and_legacy_clips(self):
+        for method_name in ("with_duration", "set_duration"):
+            with self.subTest(method_name=method_name):
+                clip = MagicMock(spec=[method_name])
+                method = getattr(clip, method_name)
+                result = MemeEngine._clip_with_duration(None, clip, 2.0)
+                method.assert_called_once_with(2.0)
+                self.assertIs(result, method.return_value)
+
     def test_engine_execute_uses_registered_handler(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             registry = OperationRegistry()
