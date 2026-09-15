@@ -46,6 +46,43 @@ def runtime_fingerprint(engine) -> str:
     })
 
 
+class DigestCache:
+    """Persists (mtime, size) -> sha256 across CLI invocations so unchanged source
+    media is never re-hashed just to compute a cache key."""
+
+    def __init__(self, root: Path):
+        self.path = root / "source-digests.json"
+        self.dirty = False
+        try:
+            self.entries: dict[str, list] = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self.entries = {}
+
+    def get(self, resolved: str, fingerprint: tuple[int, int]) -> str | None:
+        entry = self.entries.get(resolved)
+        if entry is not None and (entry[0], entry[1]) == fingerprint:
+            return entry[2]
+        return None
+
+    def put(self, resolved: str, fingerprint: tuple[int, int], digest: str) -> None:
+        self.entries[resolved] = [fingerprint[0], fingerprint[1], digest]
+        self.dirty = True
+
+    def save(self) -> None:
+        if not self.dirty:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=".source-digests-", suffix=".json", dir=self.path.parent)
+        temporary_path = Path(temporary)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(self.entries, handle, sort_keys=True)
+            os.replace(temporary_path, self.path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        self.dirty = False
+
+
 class ArtifactCache:
     def __init__(self, root: Path):
         self.root = root
@@ -103,18 +140,24 @@ def atomic_publish(source: Path, destination: Path) -> None:
 class PlanExecutor:
     def __init__(self, cache_dir: Path | None = None):
         self.cache = ArtifactCache(cache_dir) if cache_dir is not None else None
+        self._digest_store = DigestCache(cache_dir) if cache_dir is not None else None
         self._digest_cache: dict[str, tuple[tuple[int, int], str]] = {}
 
     def _digest(self, path: Path) -> str:
-        # Memoize sha256 by (mtime, size) so repeated references to the same large
-        # source file (e.g. one clip trimmed into multiple branches) hash it once.
+        # Memoize sha256 by (mtime, size), first in-process then on-disk, so repeated
+        # references to the same large source file (e.g. one clip trimmed into multiple
+        # branches, or the same source across CLI invocations) are hashed at most once.
         resolved = str(path.resolve())
         stat = path.stat()
         fingerprint = (stat.st_mtime_ns, stat.st_size)
         cached = self._digest_cache.get(resolved)
         if cached is not None and cached[0] == fingerprint:
             return cached[1]
-        digest = file_digest(path)
+        digest = self._digest_store.get(resolved, fingerprint) if self._digest_store else None
+        if digest is None:
+            digest = file_digest(path)
+            if self._digest_store is not None:
+                self._digest_store.put(resolved, fingerprint, digest)
         self._digest_cache[resolved] = (fingerprint, digest)
         return digest
 
@@ -251,6 +294,8 @@ class PlanExecutor:
             cleanup_started = perf_counter()
             if release or not succeeded:
                 shutil.rmtree(scratch)
+            if self._digest_store is not None:
+                self._digest_store.save()
             logger.info("Execution %s: %.3fs; %d cache hits, %d rendered; fingerprint %.3fs, key %.3fs, restore %.3fs, render %.3fs, store %.3fs, publish %.3fs, cleanup %.3fs",
                         "complete" if succeeded else "failed", perf_counter() - started, hits, rendered_steps,
                         fingerprint_seconds, *totals.values(), perf_counter() - cleanup_started)
