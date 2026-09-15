@@ -61,7 +61,30 @@ timestamp-only execution path have been removed.
 Jobs execute sequentially through a shared plan executor. Each step is cached under
 `<project-root>/.meme-cache/`. Use `--cache-dir <path>` to change it (relative paths
 are based on `--project-root`), `--force` to rebuild and refresh all steps, or
-`--no-cache` to bypass both cache reads and writes. `--verbose` logs hits and misses.
+`--no-cache` to bypass both cache reads and writes.
+
+Rendering runs show a single `tqdm` progress bar on interactive stderr; stdout
+retains the final output path. The bar shows the current operation and cache phase,
+completed/total operations, and elapsed time. It advances after successful publication,
+including on cache hits; it measures completed operations, not frames or bytes.
+Each completed operation leaves one line with its index, source field, operation
+name, cache status (hit, miss, forced rebuild, or disabled), and elapsed time.
+Redirecting stderr disables the bar and uses plain phase/timing logs instead.
+MoviePy's progress bars/messages are disabled; warnings and render errors remain
+visible above the bar. `--verbose` adds full cache keys, per-operation phase timings,
+and engine details. Execution timing totals remain visible without it. `--validate`,
+`--expand`, and `--schema` do not emit this rendering progress.
+
+Timings use elapsed wall-clock seconds. Compilation includes engine initialization,
+remote source resolution, and metadata inspection. Execution reports the runtime
+fingerprint, then per-operation key generation (input/font hashing), restore
+(checksum verification and copying), rendering, cache storage, and publication.
+The execution summary includes hit/render counts, phase totals, and scratch cleanup;
+job and run totals include orchestration overhead but exclude Python startup/imports.
+On a hit, rendering is skipped, but hashing, verification, copying, and publication
+still occur. Use these timings to distinguish remote/metadata delays from cache
+disk I/O before changing cache policy. Engine/script edits invalidate cache keys,
+so the first run after a code update may rebuild even with an unchanged job.
 
 Cache keys include full SHA-256 input-content hashes, effective parameters after
 preset/CLI expansion, output format, preview mode, resolved font variants, engine

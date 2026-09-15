@@ -35,6 +35,7 @@ class WriteVideoOperationTests(unittest.TestCase):
         _, kwargs = mock_clip.write_videofile.call_args
         self.assertEqual(kwargs["codec"], "h264_nvenc")
         self.assertEqual(kwargs["audio_codec"], "aac")
+        self.assertIsNone(kwargs["logger"])
 
     def test_write_video_passes_threads_and_custom_codec(self):
         handler = WriteVideoOperation()

@@ -5,7 +5,11 @@ import json
 import logging
 import sys
 from pathlib import Path
+from time import perf_counter
 from typing import Any
+
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from compact_compiler import CompactCompiler
 from compact_jobs import CompactJob, Presets, validate_job
@@ -30,7 +34,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     cache.add_argument("--no-cache", action="store_true", help="Render without reading or writing the persistent cache")
     parser.add_argument("--cache-dir", type=Path, help="Cache directory, relative to project root (default: .meme-cache)")
     parser.add_argument("--release", action="store_true", help="Remove this run's scratch files; preserve final output and persistent cache")
-    parser.add_argument("--verbose", action="store_true", help="Log step cache hits and misses and rendering details")
+    parser.add_argument("--verbose", action="store_true", help="Include full cache keys and debug details (step progress and timings are always shown)")
     parser.add_argument("--video-codec", help="Override video codec globally (e.g. h264_nvenc, libx264, h264_qsv, h264_amf)")
     parser.add_argument("--threads", type=int, help="Override threads per video encode (not parallel jobs)")
     parser.add_argument("--video-crf", type=int, help="Override video CRF/CQ quality parameter globally")
@@ -46,6 +50,33 @@ def load_config_file(config_path: Path) -> dict[str, Any]:
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
+    if args.schema or args.validate or args.expand:
+        run_jobs(parser, args)
+        return
+    logger = logging.getLogger("meme_engine")
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(levelname)s | %(message)s"))
+    previous_level, previous_propagate = logger.level, logger.propagate
+    progress_logger = logger.getChild("progress")
+    previous_progress_level = progress_logger.level
+    progress_logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG if args.verbose else logging.WARNING)
+    logger.propagate = False
+    started = perf_counter()
+    try:
+        with logging_redirect_tqdm(loggers=[logger]):
+            run_jobs(parser, args)
+    finally:
+        progress_logger.info("Run total: %.3fs", perf_counter() - started)
+        logger.removeHandler(handler)
+        handler.close()
+        logger.setLevel(previous_level)
+        logger.propagate = previous_propagate
+        progress_logger.setLevel(previous_progress_level)
+
+
+def run_jobs(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if args.schema:
         print(json.dumps(CompactJob.model_json_schema(), indent=2))
         return
@@ -71,13 +102,14 @@ def main() -> None:
     cache_dir = args.cache_dir or Path(".meme-cache")
     cache_dir = (cache_dir if cache_dir.is_absolute() else project_root / cache_dir).resolve()
     executor = PlanExecutor(None if args.no_cache else cache_dir)
-    logger = logging.getLogger("meme_engine")
-    if args.verbose:
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
-        logger.setLevel(logging.INFO)
+    logger = logging.getLogger("meme_engine.progress")
     failed = False
     for config_file in config_files:
+        job_started = perf_counter()
+        report_progress = not (args.validate or args.expand)
         try:
+            if report_progress:
+                logger.info("Job %s: loading and validating", config_file)
             config = load_config_file(config_file)
             if args.example:
                 examples = {**config.get("examples", {}), **config.get("additional_examples", {})}
@@ -90,16 +122,35 @@ def main() -> None:
             if args.validate:
                 print(f"Valid: {config_file}" + (f" ({args.example})" if args.example else ""))
                 continue
-            engine = MemeEngine(str(project_root), logger)
+            if report_progress:
+                logger.info("Config validation: %.3fs; initializing engine and resolving sources/metadata", perf_counter() - job_started)
+            compile_started = perf_counter()
+            engine = MemeEngine(str(project_root), logging.getLogger("meme_engine"))
             overrides = {"codec": args.video_codec, "crf": args.video_crf, "preset": args.video_preset, "threads": args.threads}
             plan = CompactCompiler(project_root, engine, presets=presets).compile(job, preview=args.preview_only, overrides=overrides)
+            if report_progress:
+                logger.info("Compile (engine, sources, metadata): %.3fs", perf_counter() - compile_started)
             if args.expand:
                 print(plan.model_dump_json(indent=2))
             else:
-                print(executor.execute(plan, engine, preview=args.preview_only, release=args.release, force=args.force))
+                with tqdm(total=len(plan.steps), desc="Preparing execution", unit="op", file=sys.stderr,
+                          disable=not sys.stderr.isatty(), dynamic_ncols=True, leave=False,
+                          bar_format="{desc} |{bar}| {n_fmt}/{total_fmt} ops [{elapsed}]") as bar:
+                    def update_progress(completed: int, message: str) -> None:
+                        bar.set_description_str(message, refresh=False)
+                        bar.update(completed - bar.n)
+                        bar.refresh()
+
+                    progress_options = {} if bar.disable else {"progress": update_progress}
+                    result = executor.execute(plan, engine, preview=args.preview_only, release=args.release,
+                                              force=args.force, **progress_options)
+                print(result)
         except Exception as exc:
             print(f"Error in {config_file}: {str(exc).strip() or repr(exc)}", file=sys.stderr)
             failed = True
+        finally:
+            if report_progress:
+                logger.info("Job %s: total %.3fs", config_file, perf_counter() - job_started)
     if failed:
         sys.exit(1)
 

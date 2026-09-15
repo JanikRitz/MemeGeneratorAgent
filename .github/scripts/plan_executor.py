@@ -7,8 +7,10 @@ import os
 import platform
 import shutil
 import tempfile
+from collections.abc import Callable
 from importlib.metadata import version
 from pathlib import Path
+from time import perf_counter
 
 from operations.base import OperationContext
 
@@ -123,8 +125,25 @@ class PlanExecutor:
         return object_digest({"operation": operation, "params": normalized, "fonts": fonts, "runtime": runtime,
                               "preview": preview, "suffix": Path(params["output_path"]).suffix.lower()})
 
-    def execute(self, plan, engine, preview: bool = False, release: bool = False, force: bool = False) -> str:
+    def execute(self, plan, engine, preview: bool = False, release: bool = False, force: bool = False,
+                progress: Callable[[int, str], None] | None = None) -> str:
+        started = perf_counter()
+        logger = engine.logger.getChild("progress")
+        def report(completed: int, message: str) -> None:
+            if progress is not None:
+                progress(completed, message)
+                logger.debug(message)
+            else:
+                logger.info(message)
+
+        totals = dict.fromkeys(("key", "restore", "render", "store", "publish"), 0.0)
+        hits = rendered_steps = 0
+        logger.info("Execution: %d operations; cache %s", len(plan.steps),
+                    f'forced rebuild ({self.cache.root})' if self.cache and force else self.cache.root if self.cache else "disabled")
+        report(0, "Preparing cache fingerprint" if self.cache else "Cache fingerprint skipped")
         runtime = runtime_fingerprint(engine) if self.cache else ""
+        fingerprint_seconds = perf_counter() - started
+        logger.info("Cache fingerprint: %.3fs", fingerprint_seconds)
         if self.cache and any(step.operation in TEXT_OPERATIONS for step in plan.steps):
             engine._resolve_font_path.cache_clear()
             engine.renderer._font_path_for_style.cache_clear()
@@ -136,6 +155,10 @@ class PlanExecutor:
         try:
             result = ""
             for index, step in enumerate(plan.steps):
+                step_started = perf_counter()
+                timings = dict.fromkeys(totals, 0.0)
+                label = f"[{index + 1}/{len(plan.steps)}] {step.source} ({step.operation})"
+                report(index, f"{label}: {'hashing inputs/fonts' if self.cache else 'starting'}")
                 params = dict(step.params)
                 for key in INPUT_KEYS:
                     if key in params:
@@ -148,39 +171,72 @@ class PlanExecutor:
                 staged = workspace / ("result" + destination.suffix)
                 context = OperationContext(engine=engine, logger=engine.logger, preview_only_override=preview)
                 try:
+                    phase_started = perf_counter()
                     key = self._key(step.operation, params, engine, preview, runtime) if self.cache else ""
+                    timings["key"] = perf_counter() - phase_started
+                    if self.cache:
+                        logger.debug("%s: cache key %s", label, key)
                     overlay_dir = params.get("overlay_dir")
                     params["output_path"] = str(staged)
                     if overlay_dir is not None:
                         params["overlay_dir"] = str(workspace / "overlays")
+                    if self.cache and not force:
+                        report(index, f"{label}: checking cache (verify checksums and restore)")
+                    phase_started = perf_counter()
                     hit = bool(self.cache and not force and self.cache.restore(key, workspace))
                     if hit and (not staged.is_file() or staged.stat().st_size == 0):
                         hit = False
+                    timings["restore"] = perf_counter() - phase_started
+                    status = "hit" if hit else "disabled" if not self.cache else "forced rebuild" if force else "miss (missing or invalid entry)"
+                    report(index, f"{label}: cache {status}; {'rendering skipped' if hit else 'rendering'}")
+                    phase_started = perf_counter()
                     if not hit:
                         shutil.rmtree(workspace)
                         workspace.mkdir()
                         rendered = Path(engine.execute(step.operation, params, context))
+                        timings["render"] = perf_counter() - phase_started
+                        rendered_steps += 1
                     else:
                         rendered = staged
+                        hits += 1
                     if rendered.resolve() != staged.resolve() or not rendered.is_file() or rendered.stat().st_size == 0:
                         raise ValueError("Operation did not produce its declared nonempty output")
                     if self.cache:
-                        engine.logger.info("Cache %s: %s (%s)", "hit" if hit else "miss", step.source, key)
                         if not hit:
+                            report(index, f"{label}: storing cache")
+                            phase_started = perf_counter()
                             self.cache.store(key, workspace)
+                            timings["store"] = perf_counter() - phase_started
+                    report(index, f"{label}: publishing output")
+                    phase_started = perf_counter()
                     if overlay_dir is not None and (workspace / "overlays").exists():
                         for artifact in (workspace / "overlays").rglob("*"):
                             if artifact.is_file():
                                 atomic_publish(artifact, Path(overlay_dir) / artifact.relative_to(workspace / "overlays"))
                     atomic_publish(rendered, destination)
+                    timings["publish"] = perf_counter() - phase_started
                 except Exception as exc:
+                    logger.error("%s: failed after %.3fs", label, perf_counter() - step_started)
                     raise ValueError(f"{step.source}: {exc}") from exc
                 finally:
                     shutil.rmtree(workspace)
                 result = str(destination)
                 outputs[step.params["output_path"]] = result
+                for phase, elapsed in timings.items():
+                    totals[phase] += elapsed
+                elapsed = perf_counter() - step_started
+                if progress is not None:
+                    report(index + 1, f"{label}: done")
+                    logger.info("%s: cache %s; %.3fs", label, status, elapsed)
+                log_timing = logger.debug if progress is not None else logger.info
+                log_timing("%s: done in %.3fs (key %.3fs, restore %.3fs, render %.3fs, store %.3fs, publish %.3fs)",
+                           label, elapsed, *timings.values())
             succeeded = True
             return result
         finally:
+            cleanup_started = perf_counter()
             if release or not succeeded:
                 shutil.rmtree(scratch)
+            logger.info("Execution %s: %.3fs; %d cache hits, %d rendered; fingerprint %.3fs, key %.3fs, restore %.3fs, render %.3fs, store %.3fs, publish %.3fs, cleanup %.3fs",
+                        "complete" if succeeded else "failed", perf_counter() - started, hits, rendered_steps,
+                        fingerprint_seconds, *totals.values(), perf_counter() - cleanup_started)

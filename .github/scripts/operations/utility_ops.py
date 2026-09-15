@@ -28,6 +28,7 @@ class WriteVideoOperation(OperationHandler):
         video_codec = params.get("video_codec") or "h264_nvenc"
         write_kwargs: Dict[str, Any] = {
             "codec": video_codec,
+            "logger": None,
             "audio_codec": params.get("audio_codec", "aac"),
             "temp_audiofile": str(output_path_path.parent / f".{output_path_path.stem}-{uuid.uuid4().hex}.m4a"),
         }
