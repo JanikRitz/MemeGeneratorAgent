@@ -103,15 +103,29 @@ def atomic_publish(source: Path, destination: Path) -> None:
 class PlanExecutor:
     def __init__(self, cache_dir: Path | None = None):
         self.cache = ArtifactCache(cache_dir) if cache_dir is not None else None
+        self._digest_cache: dict[str, tuple[tuple[int, int], str]] = {}
+
+    def _digest(self, path: Path) -> str:
+        # Memoize sha256 by (mtime, size) so repeated references to the same large
+        # source file (e.g. one clip trimmed into multiple branches) hash it once.
+        resolved = str(path.resolve())
+        stat = path.stat()
+        fingerprint = (stat.st_mtime_ns, stat.st_size)
+        cached = self._digest_cache.get(resolved)
+        if cached is not None and cached[0] == fingerprint:
+            return cached[1]
+        digest = file_digest(path)
+        self._digest_cache[resolved] = (fingerprint, digest)
+        return digest
 
     def _key(self, operation: str, params: dict, engine, preview: bool, runtime: str) -> str:
         normalized = {key: value for key, value in params.items() if key not in {"output_path", "overlay_dir"}}
         for key in INPUT_KEYS:
             if key in normalized:
                 path = Path(normalized[key])
-                normalized[key] = {"sha256": file_digest(path), "suffix": path.suffix.lower()}
+                normalized[key] = {"sha256": self._digest(path), "suffix": path.suffix.lower()}
         if "clip_paths" in normalized:
-            normalized["clip_paths"] = [{"sha256": file_digest(Path(path)), "suffix": Path(path).suffix.lower()} for path in normalized["clip_paths"]]
+            normalized["clip_paths"] = [{"sha256": self._digest(Path(path)), "suffix": Path(path).suffix.lower()} for path in normalized["clip_paths"]]
         fonts = []
         if operation in TEXT_OPERATIONS:
             entries = params.get("overlays", [params])
@@ -120,7 +134,7 @@ class PlanExecutor:
                 variants = []
                 for bold, italic in ((False, False), (True, False), (False, True), (True, True)):
                     path = renderer._font_path_for_style(bold, italic)
-                    variants.append(file_digest(path) if path.is_file() else "pillow-default")
+                    variants.append(self._digest(path) if path.is_file() else "pillow-default")
                 fonts.append({"variants": variants, "default_size": renderer.default_size})
         return object_digest({"operation": operation, "params": normalized, "fonts": fonts, "runtime": runtime,
                               "preview": preview, "suffix": Path(params["output_path"]).suffix.lower()})
