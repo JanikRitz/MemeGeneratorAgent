@@ -5,6 +5,7 @@
   "steps": [
     {"op": "trim", "start": 0, "end": 10},
     {"op": "scale", "max_long_side": 960},
+    {"op": "crop", "left": 240, "right": 240},
     {
       "op": "captions",
       "items": [
