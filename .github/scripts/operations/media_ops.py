@@ -104,7 +104,6 @@ class StackMediaImplOperation(OperationHandler):
             grid = [[clip1], [clip2]]
 
         final_clip = clips_array(grid)
-        resources.callback(final_clip.close)
         fps = float(getattr(clip1, "fps", getattr(clip2, "fps", 24)) or 24)
         engine._write_video(
             final_clip,

@@ -52,6 +52,7 @@ class WriteVideoOperation(OperationHandler):
         try:
             clip.write_videofile(str(output_path_path), **write_kwargs)
         finally:
+            clip.close()
             Path(write_kwargs["temp_audiofile"]).unlink(missing_ok=True)
 
     def _build_ffmpeg_params(

@@ -226,7 +226,6 @@ class ApplyMultiTextOverlaysOperation(OperationHandler):
             engine.logger.info("overlay index=%s png=%s start=%s end=%s position=%s text_align=%s text_v_align=%s", index, overlay_path, start_time, end_time, position, text_align, text_vertical_align)
 
         composed = CompositeVideoClip(layered_clips)
-        resources.callback(composed.close)
         fps = 24.0 if not media_is_video else float(getattr(base_clip, "fps", 24) or 24)
         engine._write_video(
             composed,
