@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from typing import Any, Dict
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
 from moviepy import AudioClip, CompositeAudioClip, CompositeVideoClip, VideoFileClip, concatenate_videoclips
 
 from .base import OperationContext, OperationHandler
@@ -26,6 +26,11 @@ def canvas_size(sizes: list[tuple[int, int]]) -> tuple[int, int]:
 def fitted_size(size: tuple[int, int], canvas: tuple[int, int]) -> tuple[int, int]:
     factor = min(canvas[0] / size[0], canvas[1] / size[1])
     return max(1, min(canvas[0], round(size[0] * factor))), max(1, min(canvas[1], round(size[1] * factor)))
+
+
+def blurred_background(frame: Image.Image, canvas: tuple[int, int]) -> Image.Image:
+    covered = ImageOps.fit(frame, canvas, method=Image.Resampling.LANCZOS)
+    return covered.filter(ImageFilter.GaussianBlur(radius=max(canvas) / 40))
 
 
 def display_size(clip) -> tuple[int, int]:
@@ -87,6 +92,8 @@ class ConcatenateClipsOperation(OperationHandler):
                 sheet = Image.new("RGB", (canvas[0], canvas[1] * len(frames)), "black")
                 for index, (frame, size) in enumerate(zip(frames, sizes)):
                     fitted = frame.resize(fitted_size(size, canvas), Image.Resampling.LANCZOS)
+                    if fitted.size != canvas:
+                        sheet.paste(blurred_background(frame, canvas), (0, index * canvas[1]))
                     sheet.paste(fitted, ((canvas[0] - fitted.width) // 2, index * canvas[1] + (canvas[1] - fitted.height) // 2))
                 output = output.with_suffix(".png")
                 sheet.save(output)
@@ -96,7 +103,14 @@ class ConcatenateClipsOperation(OperationHandler):
                 target = fitted_size(size, canvas)
                 resized = clip.resized(new_size=target).with_position(((canvas[0] - target[0]) // 2, (canvas[1] - target[1]) // 2))
                 resources.callback(resized.close)
-                composed = CompositeVideoClip([resized], size=canvas, bg_color=(0, 0, 0)).with_duration(clip.duration)
+                layers = [resized]
+                if target != canvas:
+                    background = clip.without_audio().image_transform(
+                        lambda frame, canvas=canvas: np.array(blurred_background(Image.fromarray(frame).convert("RGB"), canvas))
+                    )
+                    resources.callback(background.close)
+                    layers.insert(0, background)
+                composed = CompositeVideoClip(layers, size=canvas, bg_color=(0, 0, 0)).with_duration(clip.duration)
                 resources.callback(composed.close)
                 if clip.audio is not None:
                     def silent_frame(time, channels=clip.audio.nchannels):

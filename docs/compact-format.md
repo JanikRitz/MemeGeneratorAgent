@@ -249,7 +249,7 @@ refer to the combined timeline: the second segment starts at approximately secon
 
 ### Default Canvas Policy
 
-Use **largest long edge, first aspect ratio, contain, centered black padding**.
+Use **largest long edge, first aspect ratio, contain, centered blurred background**.
 Measure inputs after their branch processing, including crops and scaling, using
 display dimensions after rotation and pixel-aspect normalization.
 
@@ -261,15 +261,19 @@ display dimensions after rotation and pixel-aspect normalization.
 4. Scale every clip proportionally by `min(canvas_width / width, canvas_height / height)`.
    Upscaling is allowed here, unlike the default standalone `scale` operation.
    Round fitted dimensions to the nearest positive integer within the canvas.
-5. Center the fitted clip with opaque black (`#000000`) filling unused space.
-   Never stretch or crop. For odd padding, put the extra pixel on the right/bottom.
+5. Center the fitted clip without stretching or cropping the foreground. Fill
+  unused space with the same clip enlarged to cover the canvas, center-cropped,
+  and Gaussian-blurred with a radius of the canvas's longest edge divided by 40.
+  The background follows the current frame and contributes no additional audio.
+  Matching-size clips need no background. Previews use the same treatment.
+  For odd padding, put the extra pixel on the right/bottom.
 
 Examples:
 - First 1280x720, second 1920x1080: output 1920x1080; both fill the canvas.
 - First 1280x720, second 1080x1920: output 1920x1080; the portrait clip is about
-  608x1080 with black bars on the left and right.
+  608x1080 with a blurred copy filling the left and right sides.
 - First 720x1280, second 1920x1080: output 1080x1920; the landscape clip is about
-  1080x608 with black bars above and below.
+  1080x608 with a blurred copy filling the space above and below.
 
 "Largest resolution" thus means the largest **long-edge dimension**, not the
 largest pixel area or independent maximum width/height. It avoids creating a
@@ -279,6 +283,25 @@ canvas. There is no implicit resolution cap: explicitly scale the result when ne
 
 These are fixed v1 defaults, so everyday jobs need no extra layout settings. A future
 explicit canvas/fit option can be added separately instead of burdening this syntax.
+
+### Blurred Background Showcase
+
+Run [video_concat_blurred_background.json](../config/examples/video_concat_blurred_background.json)
+with a portrait `media/examples/vertical_video.mp4` and a landscape
+`media/examples/video.mp4`, each at least three seconds long:
+
+```powershell
+python .github/scripts/run_meme_job.py config/examples/video_concat_blurred_background.json --preview-only --release
+python .github/scripts/run_meme_job.py config/examples/video_concat_blurred_background.json --release
+```
+
+The six-second workflow plays three seconds of portrait video, then three seconds
+of landscape video. The portrait segment sets the canvas aspect ratio; the landscape
+segment stays fully visible in the center with its enlarged, blurred moving image
+above and below. Each source is scaled to a maximum long edge of 960 pixels.
+The preview shows both segments, one above the other. Results are written to
+`render/examples/concat_blurred_background.png` and `.mp4`, respectively.
+No crop or background settings are needed.
 
 ### Playback And Expansion
 

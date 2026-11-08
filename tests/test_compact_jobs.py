@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "script
 
 from compact_jobs import CompactJob, Presets, validate_job
 from compact_compiler import CompactCompiler, QUALITY, STYLES
-from operations.concatenate_clips import canvas_size, fitted_size
+from operations.concatenate_clips import blurred_background, canvas_size, fitted_size
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -473,10 +473,24 @@ class ConcatRenderingTests(unittest.TestCase):
         self.assertEqual(canvas_size([(720, 1280), (1920, 1080)]), (1080, 1920))
         self.assertEqual(fitted_size((1080, 1920), (1920, 1080)), (608, 1080))
 
-    def test_real_concat_preserves_order_padding_fps_and_audio(self):
+    def test_blurred_background_covers_canvas_and_softens_detail(self):
+        import numpy as np
+        from PIL import Image, ImageOps
+
+        for size, canvas in [((40, 80), (80, 40)), ((80, 40), (40, 80))]:
+            with self.subTest(size=size):
+                pixels = np.zeros((size[1], size[0], 3), dtype=np.uint8)
+                pixels[::2] = 240
+                frame = Image.fromarray(pixels)
+                background = blurred_background(frame, canvas)
+                sharp = ImageOps.fit(frame, canvas, method=Image.Resampling.LANCZOS)
+                self.assertEqual(background.size, canvas)
+                self.assertLess(np.asarray(background).std(), np.asarray(sharp).std() / 2)
+
+    def test_real_concat_preserves_order_blurred_padding_fps_and_audio(self):
         import logging
         import numpy as np
-        from moviepy import AudioClip, ColorClip, VideoFileClip
+        from moviepy import AudioClip, ColorClip, VideoClip, VideoFileClip
         from MemeEngine import MemeEngine
 
         with tempfile.TemporaryDirectory() as directory:
@@ -485,7 +499,11 @@ class ConcatRenderingTests(unittest.TestCase):
             with ColorClip((80, 40), color=(240, 0, 0), duration=0.5) as clip:
                 clip.write_videofile(str(first), fps=10, codec="libx264", audio=False, logger=None)
             with AudioClip(lambda time: 0.2 * np.sin(440 * 2 * np.pi * time), duration=0.5, fps=44100) as audio:
-                with ColorClip((40, 80), color=(0, 240, 0), duration=0.5).with_audio(audio) as clip:
+                def second_frame(time):
+                    color = (0, 240, 0) if time < 0.25 else (0, 0, 240)
+                    return np.full((80, 40, 3), color, dtype=np.uint8)
+
+                with VideoClip(second_frame, duration=0.5).with_audio(audio) as clip:
                     clip.write_videofile(str(second), fps=20, codec="libx264", audio_codec="aac", logger=None)
             engine = MemeEngine(str(root), logging.getLogger("test"))
             params = dict(clip_paths=[str(first), str(second)], output_path=str(output), video_codec="libx264", threads=1)
@@ -496,8 +514,11 @@ class ConcatRenderingTests(unittest.TestCase):
                 self.assertAlmostEqual(clip.duration, 1.0, places=1)
                 self.assertGreater(clip.get_frame(0.2)[20, 40, 0], 200)
                 frame = clip.get_frame(0.7)
-                self.assertLess(frame[20, 2].max(), 15)
+                self.assertGreater(frame[20, 2, 1], 200)
                 self.assertGreater(frame[20, 40, 1], 200)
+                later = clip.get_frame(0.9)
+                self.assertGreater(later[20, 2, 2], 200)
+                self.assertGreater(later[20, 40, 2], 200)
                 self.assertIsNotNone(clip.audio)
                 self.assertLess(np.abs(clip.audio.get_frame(0.2)).max(), 0.02)
                 self.assertGreater(np.abs(clip.audio.get_frame(np.linspace(0.65, 0.75, 100))).max(), 0.05)
@@ -506,6 +527,6 @@ class ConcatRenderingTests(unittest.TestCase):
             result = engine.execute("concatenate_clips", params)
             with Image.open(result) as image:
                 self.assertEqual(image.size, (80, 80))
-                self.assertEqual(image.getpixel((2, 60)), (0, 0, 0))
+                self.assertGreater(image.getpixel((2, 60))[1], 200)
             first.unlink()
             second.unlink()

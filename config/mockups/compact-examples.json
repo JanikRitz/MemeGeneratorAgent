@@ -15,6 +15,27 @@
     }
   },
   "additional_examples": {
+    "video_concat_blurred_background": {
+      "format": "meme/v1",
+      "input": "media/examples/vertical_video.mp4",
+      "output": "render/examples/concat_blurred_background.mp4",
+      "steps": [
+        {"op": "trim", "start": 0, "end": 3},
+        {"op": "scale", "max_long_side": 960},
+        {
+          "op": "concat",
+          "with": [
+            {
+              "input": "media/examples/video.mp4",
+              "steps": [
+                {"op": "trim", "start": 0, "end": 3},
+                {"op": "scale", "max_long_side": 960}
+              ]
+            }
+          ]
+        }
+      ]
+    },
     "video_concat": {
       "format": "meme/v1",
       "input": "media/examples/video.mp4",
