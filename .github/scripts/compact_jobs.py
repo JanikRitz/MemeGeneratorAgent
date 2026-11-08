@@ -207,12 +207,9 @@ class Panel(Step, Appearance):
         return self
 
 
-BranchStep = Annotated[Union[Trim, Scale, Crop, Flip, Caption, Captions, Panel], Field(discriminator="op")]
-
-
 class Branch(Model):
     input: Source
-    steps: Annotated[list[BranchStep], Field(min_length=1)]
+    steps: Annotated[list["BranchStep"], Field(min_length=1)]
 
 
 class Concat(Step):
@@ -225,6 +222,10 @@ class Stack(Step):
     with_: Source | Branch = Field(alias="with")
     direction: Literal["horizontal", "vertical"] = "horizontal"
     duration: Positive | None = None
+
+
+BranchStep = Annotated[Union[Trim, Scale, Crop, Flip, Caption, Captions, Panel, Stack], Field(discriminator="op")]
+Branch.model_rebuild()
 
 
 JobStep = Annotated[Union[Trim, Scale, Crop, Flip, Caption, Captions, Panel, Stack, Concat], Field(discriminator="op")]

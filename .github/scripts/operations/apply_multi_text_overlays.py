@@ -15,6 +15,31 @@ from .base import OperationContext, OperationHandler
 from .registry import register_operation
 
 
+def _caption_preview_times(overlays: list[dict[str, Any]], duration: float) -> list[float]:
+    intervals = []
+    boundaries = {0.0, duration}
+    for item in overlays:
+        start = max(0.0, float(item.get("start_time", 0.0)))
+        end = min(duration, float(item.get("end_time", duration)))
+        interval = (start, end) if end > start else None
+        intervals.append(interval)
+        if interval is not None:
+            boundaries.update(interval)
+
+    samples = []
+    seen_states = set()
+    ordered_boundaries = sorted(boundaries)
+    for left, right in zip(ordered_boundaries, ordered_boundaries[1:]):
+        if right <= left:
+            continue
+        sample = (left + right) / 2
+        active = tuple(index for index, interval in enumerate(intervals) if interval is not None and interval[0] <= sample < interval[1])
+        if active and active not in seen_states:
+            seen_states.add(active)
+            samples.append(sample)
+    return samples or [0.0]
+
+
 @register_operation
 class ApplyMultiTextOverlaysOperation(OperationHandler):
     name = "apply_multi_text_overlays"
@@ -45,66 +70,82 @@ class ApplyMultiTextOverlaysOperation(OperationHandler):
         if preview_only:
             if media_is_video:
                 with VideoFileClip(str(base_path)) as clip:
-                    frame = clip.get_frame(0)
-                composite_img = Image.fromarray(frame).convert("RGBA")
+                    preview_times = _caption_preview_times(params["overlays"], float(clip.duration))
+                    base_frames = [Image.fromarray(clip.get_frame(preview_time)).convert("RGBA") for preview_time in preview_times]
             else:
-                composite_img = Image.open(str(base_path)).convert("RGBA")
-            base_w, base_h = composite_img.size
-            for index, item in enumerate(params["overlays"]):
-                text_data = item.get("text")
-                if not text_data and item.get("text_structured"):
-                    text_data = "".join(part.get("text", "") for part in item["text_structured"])
-                if not text_data:
-                    engine.logger.warning("overlay index=%s skipped due to empty text", index)
-                    continue
-                width = int(item.get("width", base_w))
-                height = int(item.get("height", int(base_h * 0.25)))
-                position = engine._normalize_position(item.get("position", ["center", "top"]))
-                if bool(item.get("match_base_size", True)):
-                    width = int(base_w)
-                    height = int(base_h)
-                    position = (0, 0)
-                text_align = str(item.get("text_align", "center")).lower()
-                text_vertical_align = str(item.get("text_vertical_align", "center")).lower()
-                text_padding = int(item.get("text_padding", 6))
-                stroke_width = int(item.get("stroke_width", 3))
-                stroke_fill = item.get("stroke_fill", "#000000")
-                shadow_enabled = bool(item.get("shadow_enabled", True))
-                item_renderer = engine._get_renderer(item.get("font_path") or params.get("font_path") or context.default_font_path)
-                font_size = int(item.get("font_size", item_renderer.default_size))
-                background_color = item.get("background_color", "transparent")
-                line_height = float(item.get("line_height", 1.0))
-                paragraph_spacing = item.get("paragraph_spacing")
-                if paragraph_spacing is not None:
-                    paragraph_spacing = int(paragraph_spacing)
-                paragraph_indent_px = int(item.get("paragraph_indent_px", 0))
-                tokens = item_renderer.parse_tokens(text_data)
-                for token in tokens:
-                    token.setdefault("size", font_size)
-                canvas, metrics = item_renderer.generate_canvas(
-                    tokens,
-                    width,
-                    height,
-                    horizontal_align=text_align,
-                    vertical_align=text_vertical_align,
-                    padding=text_padding,
-                    stroke_width=stroke_width,
-                    stroke_fill=stroke_fill,
-                    shadow_enabled=shadow_enabled,
-                    background_fill=background_color,
-                    line_height=line_height,
-                    paragraph_spacing=paragraph_spacing,
-                    paragraph_indent_px=paragraph_indent_px,
-                    return_metrics=True,
-                )
-                if metrics.get("overflowed"):
-                    engine.logger.warning("overlay index=%s truncated text: rendered_lines=%s total_lines=%s truncated_lines=%s", index, metrics.get("rendered_lines"), metrics.get("total_lines"), metrics.get("truncated_lines"))
-                canvas_rgba = canvas.convert("RGBA")
-                ox, oy = engine._position_to_pixels(position, base_w, base_h, canvas_rgba.width, canvas_rgba.height)
-                composite_img.alpha_composite(canvas_rgba, dest=(max(0, ox), max(0, oy)))
-                engine.logger.info("overlay index=%s composited at (%s, %s) size=%sx%s", index, ox, oy, canvas_rgba.width, canvas_rgba.height)
+                preview_duration = float(params.get("output_duration_sec") or max((float(item.get("end_time", 3.0)) for item in params["overlays"]), default=3.0))
+                preview_times = _caption_preview_times(params["overlays"], preview_duration)
+                with Image.open(str(base_path)) as image:
+                    base_frames = [image.convert("RGBA") for _ in preview_times]
+            base_w, base_h = base_frames[0].size
+            preview_frames = []
+            for preview_time, composite_img in zip(preview_times, base_frames):
+                for index, item in enumerate(params["overlays"]):
+                    start_time = float(item.get("start_time", 0.0))
+                    end_time = float(item.get("end_time", preview_duration if not media_is_video else clip.duration))
+                    if start_time > preview_time or preview_time >= end_time:
+                        continue
+                    text_data = item.get("text")
+                    if not text_data and item.get("text_structured"):
+                        text_data = "".join(part.get("text", "") for part in item["text_structured"])
+                    if not text_data:
+                        engine.logger.warning("overlay index=%s skipped due to empty text", index)
+                        continue
+                    width = int(item.get("width", base_w))
+                    height = int(item.get("height", int(base_h * 0.25)))
+                    position = engine._normalize_position(item.get("position", ["center", "top"]))
+                    if bool(item.get("match_base_size", True)):
+                        width = int(base_w)
+                        height = int(base_h)
+                        position = (0, 0)
+                    text_align = str(item.get("text_align", "center")).lower()
+                    text_vertical_align = str(item.get("text_vertical_align", "center")).lower()
+                    text_padding = int(item.get("text_padding", 6))
+                    stroke_width = int(item.get("stroke_width", 3))
+                    stroke_fill = item.get("stroke_fill", "#000000")
+                    shadow_enabled = bool(item.get("shadow_enabled", True))
+                    item_renderer = engine._get_renderer(item.get("font_path") or params.get("font_path") or context.default_font_path)
+                    font_size = int(item.get("font_size", item_renderer.default_size))
+                    background_color = item.get("background_color", "transparent")
+                    line_height = float(item.get("line_height", 1.0))
+                    paragraph_spacing = item.get("paragraph_spacing")
+                    if paragraph_spacing is not None:
+                        paragraph_spacing = int(paragraph_spacing)
+                    paragraph_indent_px = int(item.get("paragraph_indent_px", 0))
+                    tokens = item_renderer.parse_tokens(text_data)
+                    for token in tokens:
+                        token.setdefault("size", font_size)
+                    canvas, metrics = item_renderer.generate_canvas(
+                        tokens,
+                        width,
+                        height,
+                        horizontal_align=text_align,
+                        vertical_align=text_vertical_align,
+                        padding=text_padding,
+                        stroke_width=stroke_width,
+                        stroke_fill=stroke_fill,
+                        shadow_enabled=shadow_enabled,
+                        background_fill=background_color,
+                        line_height=line_height,
+                        paragraph_spacing=paragraph_spacing,
+                        paragraph_indent_px=paragraph_indent_px,
+                        return_metrics=True,
+                    )
+                    if metrics.get("overflowed"):
+                        engine.logger.warning("overlay index=%s truncated text: rendered_lines=%s total_lines=%s truncated_lines=%s", index, metrics.get("rendered_lines"), metrics.get("total_lines"), metrics.get("truncated_lines"))
+                    canvas_rgba = canvas.convert("RGBA")
+                    ox, oy = engine._position_to_pixels(position, base_w, base_h, canvas_rgba.width, canvas_rgba.height)
+                    composite_img.alpha_composite(canvas_rgba, dest=(max(0, ox), max(0, oy)))
+                    engine.logger.info("overlay index=%s composited at preview_time=%s (%s, %s) size=%sx%s", index, preview_time, ox, oy, canvas_rgba.width, canvas_rgba.height)
+                preview_frames.append(composite_img)
+
+            columns = min(2, len(preview_frames))
+            rows = (len(preview_frames) + columns - 1) // columns
+            sheet = Image.new("RGBA", (base_w * columns, base_h * rows), (0, 0, 0, 255))
+            for index, frame in enumerate(preview_frames):
+                sheet.alpha_composite(frame, ((index % columns) * base_w, (index // columns) * base_h))
             preview_path = out_p.with_suffix(".png")
-            composite_img.save(str(preview_path))
+            sheet.save(str(preview_path))
             engine.logger.info("apply_multi_text_overlays preview_only: saved composited image to %s", preview_path)
             return str(preview_path)
 

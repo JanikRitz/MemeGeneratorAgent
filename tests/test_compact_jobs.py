@@ -100,7 +100,10 @@ class CompactCompilerTests(unittest.TestCase):
             root = Path(directory)
             for name, value in catalog_jobs().items():
                 with self.subTest(name=name):
-                    plan = self.compiler(root).compile(validate_job(value))
+                    compiler = self.compiler(root)
+                    if name == "video_stack_concatenate":
+                        compiler.probe = lambda path: dict(is_video=True, width=1280, height=720, duration_sec=4000)
+                    plan = compiler.compile(validate_job(value))
                     self.assertEqual(plan.steps[-1].params["output_path"], str((root / value["output"]).resolve()))
                     self.assertFalse(Path(plan.scratch).exists())
             self.assertEqual(list(root.iterdir()), [])
@@ -134,6 +137,25 @@ class CompactCompilerTests(unittest.TestCase):
             self.assertEqual([step.operation for step in plan.steps], ["trim_video", "trim_video", "concatenate_clips"])
             self.assertEqual(plan.steps[-1].params["clip_paths"], [step.params["output_path"] for step in plan.steps[:2]])
             self.assertEqual(plan.steps[1].params["start_sec"], 10)
+
+    def test_video_stack_concatenate_example_orders_captioned_clip_before_stacked_branch(self):
+        with (ROOT / "config/examples/video_stack_concatenate.json").open() as handle:
+            job = validate_job(json.load(handle))
+        with tempfile.TemporaryDirectory() as directory:
+            compiler = self.compiler(Path(directory))
+            compiler.probe = lambda path: dict(is_video=True, width=1280, height=720, duration_sec=4000)
+            plan = compiler.compile(job)
+        self.assertEqual([step.operation for step in plan.steps], [
+            "trim_video", "scale_media", "apply_multi_text_overlays",
+            "trim_video", "scale_media", "trim_video", "scale_media",
+            "stack_media", "apply_multi_text_overlays", "concatenate_clips",
+        ])
+        self.assertEqual(plan.steps[3].params["start_sec"], 2700)
+        self.assertEqual(plan.steps[5].params["start_sec"], 3360)
+        self.assertEqual(plan.steps[7].params["orientation"], "vertical")
+        self.assertEqual(plan.steps[-1].params["clip_paths"], [
+            plan.steps[2].params["output_path"], plan.steps[8].params["output_path"],
+        ])
 
     def test_text_is_never_resolved_as_a_source(self):
         value = catalog_jobs()["image_text_overlay"]

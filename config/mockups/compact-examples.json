@@ -35,6 +35,52 @@
           ]}
         ]}
       ]
+    },
+    "video_stack_concatenate": {
+      "format": "meme/v1",
+      "input": "stash:scene:32731",
+      "output": "render/examples/stacking_extended.mp4",
+      "steps": [
+        {"op": "trim", "start": 0, "end": 10},
+        {"op": "scale", "max_long_side": 960},
+        {
+          "op": "captions",
+          "items": [
+            {"style": "meme", "at": "bottom", "start": 0, "end": 5, "text": "**First Caption**"},
+            {"style": "meme", "at": "bottom", "start": 5, "end": 10, "text": "**Second Caption**"}
+          ]
+        },
+        {
+          "op": "concat",
+          "with": [
+            {
+              "input": "stash:scene:32547",
+              "steps": [
+                {"op": "trim", "start": 2700, "end": 2705},
+                {"op": "scale", "max_long_side": 960},
+                {
+                  "op": "stack",
+                  "direction": "vertical",
+                  "with": {
+                    "input": "stash:scene:32545",
+                    "steps": [
+                      {"op": "trim", "start": 3360, "end": 3365},
+                      {"op": "scale", "max_long_side": 960}
+                    ]
+                  }
+                },
+                {
+                  "op": "captions",
+                  "items": [
+                    {"style": "meme", "at": "top", "start": 0, "end": 5, "text": "**Top Caption**"},
+                    {"style": "meme", "at": "bottom", "start": 0, "end": 5, "text": "**Bottom Caption**"}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   },
   "examples": {
